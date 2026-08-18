@@ -1,0 +1,6 @@
+{
+  "name": "مُعَلِّمُ الذَّكَاءِ - AI for Kids",
+  "description": "تطبيق تفاعلي مبسط وشامل لتعليم الأطفال مفاهيم الذكاء الاصطناعي والتكنولوجيا مع مساعد شخصي ذكي",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
