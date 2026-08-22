@@ -2,12 +2,16 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { LabResult, Certificate, UserProgress } from "../types";
 import {
-  computeGraduationState,
   generateCertificate,
   getCertificateShareText,
   getPortfolioShareSummary,
   RANK_INFO,
 } from "../data/graduation";
+import {
+  evaluateGraduation,
+  issueOfficialCertificate,
+} from "../domain/graduation";
+import { loadLearningEvidences } from "../utils/learningEvidence";
 import {
   loadCertificate,
   saveCertificate,
@@ -29,6 +33,7 @@ import {
   ShieldCheck,
   Download,
   Flame,
+  FileCheck,
 } from "lucide-react";
 
 interface GraduationPanelProps {
@@ -51,18 +56,33 @@ export const GraduationPanel: React.FC<GraduationPanelProps> = ({
   const [copiedPortfolio, setCopiedPortfolio] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const graduationState = computeGraduationState(labs, childName, storedCert);
-  const currentRankInfo = RANK_INFO[graduationState.rank];
+  const evidences = loadLearningEvidences();
+  const evaluation = evaluateGraduation({
+    evidences,
+    labs,
+    storedCertificate: storedCert,
+    childName,
+  });
+
+  const currentRankInfo = RANK_INFO[evaluation.rank];
 
   useEffect(() => {
     setStoredCert(loadCertificate());
   }, []);
 
   const handleIssueCertificate = () => {
-    const cert = generateCertificate(childName, labs, graduationState.completedLevelsCount);
-    saveCertificate(cert);
-    setStoredCert(cert);
-    showToast("🎉 مبروك! تم إصدار وتوثيق شهادة التخرج الرسمية بنجاح!");
+    try {
+      const cert = issueOfficialCertificate(evaluation, {
+        childName,
+        labs,
+        levelsCompleted: 3,
+      });
+      saveCertificate(cert);
+      setStoredCert(cert);
+      showToast("🎉 مبروك! تم إصدار وتوثيق شهادة التخرج الرسمية بنجاح!");
+    } catch (err: any) {
+      showToast(err?.message || "تعذر إصدار الشهادة لعدم استيفاء الشروط.");
+    }
   };
 
   const handleClearCert = () => {
@@ -121,7 +141,7 @@ export const GraduationPanel: React.FC<GraduationPanelProps> = ({
             </h2>
 
             <p className="text-xs sm:text-sm text-amber-100 leading-relaxed">
-              كل مشروع تبنيه يرفع رتبتك من مستكشف إلى بانٍ صغير وصولاً إلى التخرج الرسمي كـ «مطور صغير معتمد في الذكاء الاصطناعي» مع شهادة رقمية برقم تسلسلي موثق!
+              كل مشروع تبنيه يرفع رتبتك من مستكشف إلى بانٍ صغير وصولاً إلى التتويج كـ «مطور صغير للذكاء الاصطناعي» مع شهادة إنجاز تفاعلية برقم تسلسلي خاص!
             </p>
           </div>
 
@@ -141,13 +161,13 @@ export const GraduationPanel: React.FC<GraduationPanelProps> = ({
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
         <h3 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2">
           <Award className="w-5 h-5 text-amber-500" />
-          <span>مسار الرتب والاعتماد المهني:</span>
+          <span>مسار الرتب والإنجاز التعليمي:</span>
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {(["explorer", "builder", "young-developer"] as const).map((rankKey, idx) => {
             const info = RANK_INFO[rankKey];
-            const isCurrent = graduationState.rank === rankKey;
+            const isCurrent = evaluation.rank === rankKey;
             const isUnlocked =
               (rankKey === "explorer" && labs.length >= 0) ||
               (rankKey === "builder" && labs.length >= 3) ||
@@ -302,7 +322,7 @@ export const GraduationPanel: React.FC<GraduationPanelProps> = ({
                 </div>
 
                 <div className="p-3 rounded-2xl bg-amber-100/60 border border-amber-200 text-center">
-                  <span className="text-[10px] font-bold text-amber-900 block">معدل الإتقان</span>
+                  <span className="text-[10px] font-bold text-amber-900 block">متوسط دقة التقييمات</span>
                   <span className="text-xs font-black text-emerald-900 font-mono">{storedCert.averageAccuracy}%</span>
                 </div>
 
@@ -330,7 +350,7 @@ export const GraduationPanel: React.FC<GraduationPanelProps> = ({
               </div>
             </div>
           </motion.div>
-        ) : graduationState.canGraduate ? (
+        ) : evaluation.isEligible ? (
           /* Eligible to graduate - Big Celebration Prompt */
           <div className="bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-900 rounded-3xl p-8 sm:p-12 text-white text-center space-y-6 shadow-2xl">
             <div className="w-24 h-24 mx-auto rounded-3xl bg-amber-400 text-slate-950 flex items-center justify-center text-5xl shadow-xl animate-bounce">
@@ -339,13 +359,13 @@ export const GraduationPanel: React.FC<GraduationPanelProps> = ({
 
             <div className="space-y-2 max-w-xl mx-auto">
               <span className="text-xs font-black px-3 py-1 rounded-full bg-white/20 text-amber-300">
-                استحقاق التخرج الرسمي محقق 100% ⭐
+                استحقاق التخرج الرسمي محقق بالأدلة التقييمية 100% ⭐
               </span>
               <h3 className="text-2xl sm:text-4xl font-black">
                 مبروك يا {childName}! أنت مؤهل الآن للتخرج
               </h3>
               <p className="text-xs sm:text-sm text-purple-200 leading-relaxed">
-                لقد أنجزت {labs.length} مشاريع حقيقية وحققت معدل دقة {graduationState.averageAccuracy}%. اضغط أدناه لإصدار وتوثيق شهادتك الرسمية فوراً!
+                لقد استوفيت كافة متطلبات الإتقان وأدلة التقييم المعتمدة بمعدل دقة {evaluation.averageAccuracy}%. اضغط أدناه لإصدار وتوثيق شهادتك الرسمية فوراً!
               </p>
             </div>
 
@@ -358,38 +378,83 @@ export const GraduationPanel: React.FC<GraduationPanelProps> = ({
             </button>
           </div>
         ) : (
-          /* Not yet eligible - Roadmap Guidance */
-          <div className="bg-slate-50 rounded-3xl p-6 sm:p-8 border border-slate-200 space-y-5">
+          /* Not yet eligible - Detailed Evidence-Based Requirements Roadmap */
+          <div className="bg-slate-50 rounded-3xl p-6 sm:p-8 border border-slate-200 space-y-6">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-2xl shrink-0">
                 🧭
               </div>
               <div className="space-y-1">
                 <h4 className="text-base sm:text-lg font-black text-slate-900">
-                  شروط الحصول على شهادة مطور صغير معتمد:
+                  شروط التخرج والاعتماد المبني على الأدلة التقييمية:
                 </h4>
                 <p className="text-xs sm:text-sm text-slate-600">
-                  تحتاج إلى إكمال 6 مشاريع موثقة أو إنهاء جميع المستويات الثلاثة. متبقي لديك:{" "}
-                  <span className="font-black text-indigo-600 font-mono">
-                    {graduationState.projectsToYoungDeveloper} مشاريع إضافية
-                  </span>
-                  .
+                  القاعدة الأكاديمية: شهادة التخرج تُمنح حصراً بناءً على كفاءات مثبتة ومشاريع مقيّمة (XP ≠ Mastery).
                 </p>
               </div>
             </div>
 
-            {/* Progress bar */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                <span>المشاريع المنجزة حتى الآن:</span>
-                <span className="font-mono text-indigo-600">{labs.length} / 6 مشاريع</span>
-              </div>
-              <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden">
+            {/* Explicit Requirements Checklist */}
+            <div className="space-y-3">
+              {evaluation.requirements.map((req) => (
                 <div
-                  style={{ width: `${Math.min(100, (labs.length / 6) * 100)}%` }}
-                  className="h-full bg-gradient-to-r from-amber-500 to-indigo-600 rounded-full transition-all duration-500"
-                />
-              </div>
+                  key={req.key}
+                  className={`p-4 rounded-2xl border transition-all ${
+                    req.isSatisfied
+                      ? "bg-emerald-50/60 border-emerald-300 text-emerald-950"
+                      : "bg-white border-slate-200 text-slate-800"
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        {req.isSatisfied ? (
+                          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                        ) : (
+                          <Lock className="w-4 h-4 text-slate-400 shrink-0" />
+                        )}
+                        <h5 className="text-sm font-black">{req.titleAr}</h5>
+                      </div>
+                      <p className="text-xs text-slate-500 mr-7">{req.descriptionAr}</p>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-start sm:self-center mr-7 sm:mr-0">
+                      <span
+                        className={`text-xs font-mono font-black px-2.5 py-1 rounded-xl ${
+                          req.isSatisfied
+                            ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                            : "bg-slate-100 text-slate-700 border border-slate-200"
+                        }`}
+                      >
+                        {req.currentValue} / {req.targetValue} {req.unitAr}
+                      </span>
+                      <span
+                        className={`text-[11px] font-black px-2 py-0.5 rounded-lg ${
+                          req.isSatisfied
+                            ? "bg-emerald-200 text-emerald-900"
+                            : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {req.isSatisfied ? "مُستوفى ✓" : "قيد الإنجاز"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Requirement Progress Bar */}
+                  <div className="mt-3 mr-7 sm:mr-0">
+                    <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                      <div
+                        style={{
+                          width: `${Math.min(100, (req.currentValue / req.targetValue) * 100)}%`,
+                        }}
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          req.isSatisfied ? "bg-emerald-500" : "bg-indigo-600"
+                        }`}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
 
             <div className="pt-2 flex flex-wrap items-center gap-3">

@@ -24,12 +24,20 @@ import { EncouragementBanner } from "./components/EncouragementBanner";
 import { CelebrationOverlay, CelebrationData } from "./components/CelebrationOverlay";
 import { ProjectsPortfolio } from "./components/ProjectsPortfolio";
 import { loadLabs, addLabResult, loadCertificate } from "./data/storage";
+import { progressStore } from "./persistence";
 import { LabResult } from "./data/labs";
 import { LESSONS } from "./data/lessons";
 import { LAB_CATALOG } from "./data/labCatalog";
 import { computeGraduationState } from "./data/graduation";
 import { speakText, stopSpeech } from "./data/mascot";
 import { playClickSound, playSuccessSound, playLevelUpSound } from "./data/audioEffects";
+import { recordLearningEvidence, mapLessonToSkillId } from "./utils/learningEvidence";
+import {
+  applyXPEvent,
+  completeLessonProgress,
+  completeLabProgress,
+  claimWeeklyGoalReward,
+} from "./domain/progress";
 import {
   Brain,
   BookOpen,
@@ -74,34 +82,10 @@ function MainAppContent() {
   const [labs, setLabs] = useState<LabResult[]>(() => loadLabs());
   const [certificate, setCertificate] = useState(() => loadCertificate());
 
-  const [progress, setProgress] = useState<UserProgress>(() => {
-    const saved = localStorage.getItem("kids_ai_progress");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    return {
-      xp: 120,
-      level: 1,
-      streakDays: 3,
-      completedLessons: ["lesson-1"],
-      completedLabs: [],
-      earnedBadges: ["badge-first-step"],
-      totalChatMessages: 0,
-      studentName: "المستكشف الصغير",
-      zakiCustomization: {
-        colorId: "indigo",
-        accessoryId: "glasses",
-        expressionId: "happy",
-      },
-    };
-  });
+  const [progress, setProgress] = useState<UserProgress>(() => progressStore.loadProgress());
 
   useEffect(() => {
-    localStorage.setItem("kids_ai_progress", JSON.stringify(progress));
+    progressStore.saveProgress(progress);
   }, [progress]);
 
   // Compute graduation and rank status
@@ -122,42 +106,79 @@ function MainAppContent() {
     }
   }, []);
 
-  const awardXP = (amount: number, reason: string) => {
-    setProgress((prev) => {
-      const newXP = prev.xp + amount;
-      const newLevel = Math.floor(newXP / 200) + 1;
-      if (newLevel > prev.level && soundEnabled) {
-        playLevelUpSound();
-      }
-      return {
-        ...prev,
-        xp: newXP,
-        level: newLevel,
-      };
-    });
-    setLastActionTrigger({ type: "xp_earned", timestamp: Date.now(), data: { amount, reason } });
+  const awardXP = (amount: number, reason: string, customEventId?: string) => {
+    const eventId = customEventId || `xp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    let applied = false;
+    let levelUp = false;
 
-    if (soundEnabled) {
-      playSuccessSound();
-      speakText(`عظيم جداً! حصلت على ${amount} نقطة XP بفضل ${reason}!`);
+    setProgress((prev) => {
+      const res = applyXPEvent(prev, {
+        id: eventId,
+        type: "generic_reward",
+        sourceId: reason,
+        amount,
+        reason,
+        createdAt: new Date().toISOString(),
+      });
+      applied = res.applied;
+      if (res.updatedProgress.level > prev.level) {
+        levelUp = true;
+      }
+      return res.updatedProgress;
+    });
+
+    if (applied) {
+      setLastActionTrigger({ type: "xp_earned", timestamp: Date.now(), data: { amount, reason } });
+
+      if (soundEnabled) {
+        if (levelUp) {
+          playLevelUpSound();
+        } else {
+          playSuccessSound();
+        }
+        speakText(`عظيم جداً! حصلت على ${amount} نقطة XP بفضل ${reason}!`);
+      }
     }
   };
 
   const handleCompleteLesson = (lessonId: string, xpReward: number) => {
-    if (!progress.completedLessons.includes(lessonId)) {
-      setProgress((prev) => ({
-        ...prev,
-        completedLessons: [...prev.completedLessons, lessonId],
-      }));
-      setLastActionTrigger({ type: "lesson_completed", timestamp: Date.now(), data: { lessonId } });
-      awardXP(xpReward, "إكمال الدرس الذكي");
+    let wasFirst = false;
+    let streakGrew = false;
 
+    setProgress((prev) => {
+      const res = completeLessonProgress(prev, lessonId, xpReward);
+      wasFirst = res.isFirstCompletion;
+      streakGrew = res.streakIncremented;
+      return res.updatedProgress;
+    });
+
+    if (streakGrew) {
+      setStreakCelebrationSignal(Date.now());
+    }
+
+    if (wasFirst) {
+      setLastActionTrigger({ type: "lesson_completed", timestamp: Date.now(), data: { lessonId } });
+
+      // Record non-assessed completion evidence (Completion != Mastery)
       const completedLessonObj = LESSONS.find((l) => l.id === lessonId);
-      const titleText = completedLessonObj ? `أتقنت درس: ${completedLessonObj.title} 🎉` : "أنجزت الدرس بنجاح الباهر! 🎉";
+      const skillId = mapLessonToSkillId(lessonId, completedLessonObj?.level);
+      recordLearningEvidence({
+        type: "LESSON_COMPLETED",
+        sourceId: lessonId,
+        skillIds: [skillId],
+        assessed: false,
+        masteryEligible: false,
+        metadata: {
+          lessonTitle: completedLessonObj?.title,
+          level: completedLessonObj?.level,
+        },
+      });
+
+      const titleText = completedLessonObj ? `أكملت بنجاح درس: ${completedLessonObj.title} 🎉` : "أنجزت الدرس بنجاح الباهر! 🎉";
 
       setCelebrationData({
         title: titleText,
-        subtitle: "أحسنت يا بطل! خطوة عملاقة نحو إتقان مفاهيم الذكاء الاصطناعي وبناء مستقبل مبرمج ذكي!",
+        subtitle: "أحسنت يا بطل! خطوة ممتازة نحو تعلّم وتطبيق مفاهيم الذكاء الاصطناعي وبناء مستقبل مبرمج ذكي!",
         xpEarned: xpReward,
         icon: "🎓",
         badgeName: "إكمال الدرس الذكي",
@@ -178,14 +199,26 @@ function MainAppContent() {
   };
 
   const handleClaimGoalReward = (rewardXP: number) => {
-    awardXP(rewardXP, "إكمال الهدف الأسبوعي بنجاح 🎯");
-    setCelebrationData({
-      title: "حققت هدفك الأسبوعي بنجاح! 🎯🏆",
-      subtitle: "مبروك يا بطل! أثبت عزيمتك العالية وقدرتك المذهلة على التخطيط والوصول لقمة النجاح!",
-      xpEarned: rewardXP,
-      icon: "👑",
-      badgeName: "بطل التحدي الأسبوعي",
+    let claimed = false;
+    setProgress((prev) => {
+      if (!prev.weeklyGoal) return prev;
+      const res = claimWeeklyGoalReward(prev, prev.weeklyGoal.id, rewardXP);
+      claimed = res.applied;
+      return res.updatedProgress;
     });
+
+    if (claimed) {
+      if (soundEnabled) {
+        playSuccessSound();
+      }
+      setCelebrationData({
+        title: "حققت هدفك الأسبوعي بنجاح! 🎯🏆",
+        subtitle: "مبروك يا بطل! أثبت عزيمتك العالية وقدرتك المذهلة على التخطيط والوصول لقمة النجاح!",
+        xpEarned: rewardXP,
+        icon: "👑",
+        badgeName: "بطل التحدي الأسبوعي",
+      });
+    }
   };
 
   const handleSaveCustomization = (customization: ZakiCustomization) => {
@@ -202,12 +235,8 @@ function MainAppContent() {
     }
     setIsLoginOpen(false);
 
-    // Increment consecutive login streak and trigger particle celebration
-    setProgress((prev) => ({
-      ...prev,
-      streakDays: prev.streakDays + 1,
-    }));
-    setStreakCelebrationSignal(Date.now());
+    // NOTE (Proof 5): Login/open alone does NOT increment streak.
+    // Daily streaks are only incremented upon engaging in qualifying learning activities.
 
     // If logged in as parent, switch to parent report tab
     if (user.role === "parent") {
@@ -218,16 +247,32 @@ function MainAppContent() {
   const handleSaveLabProject = (newLab: LabResult) => {
     const updated = addLabResult(newLab);
     setLabs(updated);
+
+    let streakGrew = false;
+    setProgress((prev) => {
+      const res = completeLabProgress(prev, newLab.labKey || newLab.id, 100);
+      streakGrew = res.streakIncremented;
+      return res.updatedProgress;
+    });
+
+    if (streakGrew) {
+      setStreakCelebrationSignal(Date.now());
+    }
+
     if (soundEnabled) {
       playSuccessSound();
     }
     setCelebrationData({
       title: "إنجاز وتوثيق مشروع ذكي جديد! 🚀",
-      subtitle: `تمت إضافة مشروع (${newLab.titleAr}) إلى محفظتك الرقمية وإصدار بطاقة إتقان قابلة للمشاركة والتحميل!`,
+      subtitle: `تمت إضافة مشروع (${newLab.titleAr}) إلى محفظتك الرقمية وإصدار بطاقة إنجاز قابلة للمشاركة والتحميل!`,
       xpEarned: 100,
       icon: newLab.thumbnail || "🚀",
       badgeName: newLab.titleAr,
     });
+  };
+
+  const handleImproveLab = (_labId: string, bonus: number) => {
+    awardXP(bonus, "تحسين وتطوير نموذج المختبر الذكي 🚀");
   };
 
   const handleTabChange = (tab: TabType) => {
@@ -411,8 +456,16 @@ function MainAppContent() {
                   if (soundEnabled) playClickSound();
                   setActiveLearningLab(lab);
                 }}
+                onOpenLab={(labKey) => {
+                  if (soundEnabled) playClickSound();
+                  const matchingLab = LAB_CATALOG.find((l) => l.key === labKey || l.category === labKey);
+                  if (matchingLab) {
+                    setActiveLearningLab(matchingLab);
+                  }
+                }}
                 onNavigateToProjects={() => handleTabChange("projects")}
                 onNavigateToGraduation={() => handleTabChange("graduation")}
+                childName={progress.studentName}
               />
             </motion.div>
           )}
@@ -645,13 +698,22 @@ function MainAppContent() {
       {/* Interactive Lab Runner Modal */}
       {activeLearningLab && (
         <LabCompletion
-          lab={activeLearningLab}
+          initialLabKey={activeLearningLab.key}
+          labs={labs}
           childName={progress.studentName || "المستكشف الصغير"}
-          onComplete={(result) => {
+          onSaveLabResult={(result) => {
             handleSaveLabProject(result);
             setActiveLearningLab(null);
           }}
-          onClose={() => setActiveLearningLab(null)}
+          onImproveLab={handleImproveLab}
+          onNavigateToProjects={() => {
+            setActiveLearningLab(null);
+            setActiveTab("projects");
+          }}
+          onNavigateToPath={() => {
+            setActiveLearningLab(null);
+            setActiveTab("path");
+          }}
         />
       )}
 

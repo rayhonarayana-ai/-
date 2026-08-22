@@ -36,7 +36,7 @@ export const Certificate: React.FC<CertificateProps> = ({ progress, onUpdateName
             <Award className="w-6 h-6 text-amber-500" />
             <span>شهادة مستكشف الذكاء الاصطناعي الصغير</span>
           </h2>
-          <p className="text-sm font-bold text-slate-500">احصل على شهادتك الرسمية المعتمدة واطبعها بشرف!</p>
+          <p className="text-sm font-bold text-slate-500">احصل على شهادة إنجازك التقديرية واطبعها بشرف!</p>
         </div>
 
         <button

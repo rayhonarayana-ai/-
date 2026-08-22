@@ -163,11 +163,11 @@ export function downloadProjectAchievementPNG(
   // Certificate Main Title
   ctx.font = "900 32px 'Cairo', 'Tajawal', sans-serif";
   ctx.fillStyle = "#ffffff";
-  ctx.fillText("🌟 شَهَادَةُ إِتْقَانِ وَإِنْجَازِ مَشْرُوعِ AI 🌟", width / 2, 160);
+  ctx.fillText("🌟 شَهَادَةُ تَوْثِيقِ وَإِنْجَازِ مَشْرُوعِ AI 🌟", width / 2, 160);
 
   ctx.font = "700 13px 'Cairo', sans-serif";
   ctx.fillStyle = "#fbbf24";
-  ctx.fillText("AI PROJECT MASTERY & PRACTICAL ACHIEVEMENT", width / 2, 185);
+  ctx.fillText("AI PRACTICAL PROJECT & LEARNING ACHIEVEMENT", width / 2, 185);
 
   // Subtle divider line
   const lineGrad = ctx.createLinearGradient(width / 2 - 250, 0, width / 2 + 250, 0);
@@ -244,7 +244,7 @@ export function downloadProjectAchievementPNG(
   }
 
   // Metrics Row inside Project Box
-  const accuracyVal = project.accuracy !== undefined ? `${project.accuracy}%` : "100%";
+  const accuracyVal = project.accuracy !== undefined ? `${project.accuracy}%` : "مكتمل بنجاح";
   const dateFormatted = project.completedAt
     ? new Date(project.completedAt).toLocaleDateString("ar-SA", {
         year: "numeric",
@@ -268,7 +268,8 @@ export function downloadProjectAchievementPNG(
 
   ctx.font = "bold 14px 'Cairo', sans-serif";
   ctx.fillStyle = "#34d399";
-  ctx.fillText(`⚡ نسبة الإتقان: ${accuracyVal}`, width / 2 - 125, 506);
+  const accuracyText = project.accuracy !== undefined ? `⚡ نسبة الدقة: ${project.accuracy}%` : "⚡ الحالة: مكتمل بنجاح";
+  ctx.fillText(accuracyText, width / 2 - 125, 506);
 
   // Completion Date badge
   ctx.fillStyle = "rgba(129, 140, 248, 0.2)";

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { speakText } from "../data/mascot";
 import { ShieldCheck, CheckCircle2, AlertTriangle, Sparkles, Trophy, ArrowLeft } from "lucide-react";
 import { LabResult } from "../data/labs";
+import { recordLearningEvidence } from "../utils/learningEvidence";
 
 interface LabEthicsProps {
   onAwardXP: (amount: number, reason: string) => void;
@@ -42,6 +43,7 @@ export const LabEthics: React.FC<LabEthicsProps> = ({
   onNavigateToPortfolio,
 }) => {
   const [completedScenarios, setCompletedScenarios] = useState<{ [key: string]: number }>({});
+  const [rewardedScenarios, setRewardedScenarios] = useState<string[]>([]);
   const [savedToPortfolio, setSavedToPortfolio] = useState(false);
 
   const handleSelectAnswer = (scId: string, optIdx: number, isCorrect: boolean) => {
@@ -49,7 +51,10 @@ export const LabEthics: React.FC<LabEthicsProps> = ({
     setCompletedScenarios(updated);
 
     if (isCorrect) {
-      onAwardXP(35, "اجتياز اختبار حارس الأمان الذكي");
+      if (!rewardedScenarios.includes(scId)) {
+        onAwardXP(35, "اجتياز اختبار حارس الأمان الذكي");
+        setRewardedScenarios((prev) => [...prev, scId]);
+      }
       speakText("أحسنت يا بطل! قراراتك حكيمة وآمنة!");
     }
 
@@ -61,6 +66,25 @@ export const LabEthics: React.FC<LabEthicsProps> = ({
 
       const scorePct = Math.round((correctCount / SCENARIOS.length) * 100);
 
+      // Record valid assessment evidence with actual score and ethical rubric
+      recordLearningEvidence({
+        type: "LAB_COMPLETED",
+        sourceId: "lab-ethics-safeguard",
+        skillIds: ["skill_ai_ethics"],
+        score: scorePct,
+        correct: correctCount,
+        total: SCENARIOS.length,
+        assessed: true,
+        passed: scorePct >= 66,
+        masteryEligible: scorePct === 100,
+        metadata: { title: "ميثاق الأمان وحارس الذكاء المسؤول" },
+      });
+
+      const summaryText =
+        scorePct === 100
+          ? "إجابة صحيحة كاملة لجميع مواقف الأمان وحماية الخصوصية والأمانة العلمية بنسبة 100%."
+          : `استيعاب مواقف الأمان وحماية الخصوصية الرقمية بنسبة إجابات صحيحة بلغت ${scorePct}%.`;
+
       const newProject: LabResult = {
         id: `ethics-${Date.now()}`,
         labKey: "ethics-safe-charter",
@@ -68,11 +92,11 @@ export const LabEthics: React.FC<LabEthicsProps> = ({
         titleEn: "Safe AI & Ethics Guardian Protocol",
         category: "other",
         completedAt: new Date().toISOString(),
-        accuracy: scorePct >= 66 ? scorePct : 100,
+        accuracy: scorePct,
         attempts: 1,
         durationMinutes: 7,
-        resultSummaryAr: "اجتياز اختبارات حماية الخصوصية، تحري الأخبار المزيفة، والأمانة العلمية وصياغة ميثاق الأمان الرقمي.",
-        resultSummaryEn: "Mastered ethical digital principles, deepfake verification, and privacy preservation in AI usage.",
+        resultSummaryAr: summaryText,
+        resultSummaryEn: `Completed AI safety & ethics evaluation with ${scorePct}% accuracy.`,
         codeSnippet: `// ميثاق الأمان والمسؤولية الأخلاقية
 const SAFETY_CHARTER = {
   privacyFirst: true,

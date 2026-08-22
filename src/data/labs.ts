@@ -234,7 +234,7 @@ export function getLabsStats(labs?: LabResult[]): {
   const averageAccuracy =
     validAccuracies.length > 0
       ? Math.round(validAccuracies.reduce((a, b) => a + b, 0) / validAccuracies.length)
-      : 100;
+      : 0;
 
   const totalStars = sourceLabs.filter((l) => (l.accuracy ?? 0) >= 98).length;
 

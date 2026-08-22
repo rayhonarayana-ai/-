@@ -106,6 +106,7 @@ export const ProjectsPortfolio: React.FC<ProjectsPortfolioProps> = ({
   const [showStarredOnly, setShowStarredOnly] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [starredIds, setStarredIds] = useState<string[]>(() => loadStarredProjects());
+  const [rewardedStarredIds, setRewardedStarredIds] = useState<string[]>([]);
   const [activeModalProject, setActiveModalProject] = useState<Project | null>(null);
   const [cardModalProject, setCardModalProject] = useState<Project | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -141,8 +142,9 @@ export const ProjectsPortfolio: React.FC<ProjectsPortfolioProps> = ({
 
     if (isNowStarred) {
       showToast(`⭐ تم تثبيت (${name}) في قائمة مشاريعك المفضلة بالأعلى! 📌`);
-      if (onAwardXP) {
+      if (onAwardXP && !rewardedStarredIds.includes(projectId)) {
         onAwardXP(15, `تثبيت مشروع في المفضلة: ${name}`);
+        setRewardedStarredIds((prev) => [...prev, projectId]);
       }
     } else {
       showToast(`💫 تمت إزالة (${name}) من قائمة المفضلة`);
@@ -346,7 +348,7 @@ export const ProjectsPortfolio: React.FC<ProjectsPortfolioProps> = ({
 
   // Export / Share achievement card text
   const handleExportAchievementCard = (project: Project) => {
-    const accuracyText = project.accuracy !== undefined ? `${project.accuracy}%` : "100% (إتقان تام)";
+    const accuracyText = project.accuracy !== undefined ? `${project.accuracy}%` : "غير مُقيّم (مكتمل)";
     const dateFormatted = project.completedAt
       ? new Date(project.completedAt).toLocaleDateString("ar-SA", {
           year: "numeric",
@@ -362,7 +364,7 @@ export const ProjectsPortfolio: React.FC<ProjectsPortfolioProps> = ({
 👤 البطل المبتكر: ${project.childName || childName}
 📁 المشروع: ${project.titleAr || project.title}
 🏷️ التصنيف: ${getCategoryLabel(project.category)}
-🎯 نسبة الإتقان والدقة: ${accuracyText}
+🎯 نسبة الدقة المحققة: ${accuracyText}
 📅 تاريخ الإنجاز: ${dateFormatted}
 
 📝 ملخص الإنجاز:
@@ -949,7 +951,7 @@ print("تمت معالجة مصفوفة الصورة بنجاح!")`,
                           <div className="flex items-center justify-between text-xs font-black">
                             <span className="text-slate-600 flex items-center gap-1">
                               <Zap className="w-3.5 h-3.5 text-amber-500" />
-                              <span>نسبة الإتقان والدقة:</span>
+                              <span>نسبة الدقة المحققة:</span>
                             </span>
                             <span className="text-indigo-600 font-extrabold">{project.accuracy}%</span>
                           </div>
@@ -1121,9 +1123,9 @@ print("تمت معالجة مصفوفة الصورة بنجاح!")`,
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="p-4 bg-indigo-50/70 border border-indigo-100 rounded-2xl flex items-center justify-between">
                     <div>
-                      <span className="text-xs font-bold text-indigo-700 block">نسبة الإتقان والدقة</span>
+                      <span className="text-xs font-bold text-indigo-700 block">نسبة الدقة المحققة</span>
                       <span className="text-xl font-black text-indigo-950">
-                        {activeModalProject.accuracy !== undefined ? `${activeModalProject.accuracy}%` : "100%"}
+                        {activeModalProject.accuracy !== undefined ? `${activeModalProject.accuracy}%` : "غير مُقيّم"}
                       </span>
                     </div>
                     <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center">

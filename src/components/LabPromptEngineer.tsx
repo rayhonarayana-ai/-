@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { speakText } from "../data/mascot";
 import { Sparkles, Wand2, Volume2, Loader2, MessageSquareCode, CheckCircle2, ArrowLeft } from "lucide-react";
 import { LabResult } from "../data/labs";
+import { recordLearningEvidence } from "../utils/learningEvidence";
+import { aiClient } from "../services/aiClient";
 
 interface LabPromptEngineerProps {
   onAwardXP: (amount: number, reason: string) => void;
@@ -47,6 +49,7 @@ export const LabPromptEngineer: React.FC<LabPromptEngineerProps> = ({
 
   const [loading, setLoading] = useState(false);
   const [outputResult, setOutputResult] = useState<string | null>(null);
+  const [hasAwardedPromptXP, setHasAwardedPromptXP] = useState(false);
   const [savedToPortfolio, setSavedToPortfolio] = useState(false);
 
   const handleGeneratePrompt = async () => {
@@ -55,25 +58,30 @@ export const LabPromptEngineer: React.FC<LabPromptEngineerProps> = ({
     setSavedToPortfolio(false);
 
     try {
-      const res = await fetch("/api/prompt-lab", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subject: selectedSubject.value,
-          setting: selectedPlace.value,
-          style: selectedStyle.value,
-          emotion: selectedMood.value,
-        }),
+      const data = await aiClient.generatePromptStory({
+        subject: selectedSubject.value,
+        setting: selectedPlace.value,
+        style: selectedStyle.value,
+        emotion: selectedMood.value,
       });
 
-      if (!res.ok) throw new Error("Failed to generate prompt output.");
-
-      const data = await res.json();
       setOutputResult(data.result);
-      onAwardXP(40, "صناعة أمر ذكاء اصطناعي محترف");
+      if (!hasAwardedPromptXP) {
+        onAwardXP(40, "صناعة أمر ذكاء اصطناعي محترف");
+        setHasAwardedPromptXP(true);
+      }
       speakText(data.result.slice(0, 150));
 
       if (onCompleteProject) {
+        // Record non-assessed lab completion evidence (Creative activity, assessed = false)
+        recordLearningEvidence({
+          type: "LAB_COMPLETED",
+          sourceId: "lab-prompt-engineer",
+          skillIds: ["skill_prompt_engineering"],
+          assessed: false,
+          metadata: { subject: selectedSubject.label, place: selectedPlace.label },
+        });
+
         const assembledPrompt = `[الدور]: كاتب ومبتكر ذكي | [الموضوع]: ${selectedSubject.value} | [المكان]: ${selectedPlace.value} | [الأسلوب]: ${selectedStyle.value} | [المشاعر]: ${selectedMood.value}`;
         const newProject: LabResult = {
           id: `prompt-${Date.now()}`,
@@ -82,10 +90,9 @@ export const LabPromptEngineer: React.FC<LabPromptEngineerProps> = ({
           titleEn: `Prompt Engineering: ${selectedSubject.label.split(" ")[0]}`,
           category: "prompt-engineering",
           completedAt: new Date().toISOString(),
-          accuracy: 100,
           attempts: 1,
           durationMinutes: 8,
-          resultSummaryAr: `صياغة وهندسة أمر متكامل خماسي العناصر (${selectedSubject.label}) لتوليد استجابة إبداعية دقيقة.`,
+          resultSummaryAr: `صياغة وهندسة أمر متكامل خماسي العناصر (${selectedSubject.label}) لتوليد استجابة إبداعية مخصصة.`,
           resultSummaryEn: `Crafted 5-part prompt architecture to steer AI text generation for ${selectedSubject.label}.`,
           codeSnippet: `[معادلة صياغة الأوامر الخماسية]
 الموضوع: ${selectedSubject.value}

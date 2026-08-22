@@ -7,6 +7,7 @@ import { ZakiVoiceSettingsModal } from "./ZakiVoiceSettingsModal";
 import { ZakiSpeakingVisualizer } from "./ZakiSpeakingVisualizer";
 import { speakText, stopSpeech, replayLastSpeech } from "../data/mascot";
 import { ttsManager } from "../data/speech/ttsManager";
+import { aiClient } from "../services/aiClient";
 import {
   Send,
   Mic,
@@ -47,6 +48,7 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ onAwardXP }) => {
   const [activeSpeechId, setActiveSpeechId] = useState<string | null>(null);
   const [isVoiceSettingsOpen, setIsVoiceSettingsOpen] = useState(false);
   const [isSpeakingGlobal, setIsSpeakingGlobal] = useState(ttsManager.isSpeaking);
+  const [chatXPAwardCount, setChatXPAwardCount] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Synchronize global speaking state
@@ -120,22 +122,13 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ onAwardXP }) => {
         content: m.content,
       }));
 
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: formattedHistory,
-          language: selectedLanguage.id,
-          persona: selectedPersona.id,
-          personaPrompt: selectedPersona.personalitySystemPrompt,
-        }),
+      const data = await aiClient.sendChatMessage({
+        messages: formattedHistory,
+        language: selectedLanguage.id,
+        persona: selectedPersona.id,
+        personaPrompt: selectedPersona.personalitySystemPrompt,
       });
 
-      if (!res.ok) {
-        throw new Error("Failed to connect to assistant.");
-      }
-
-      const data = await res.json();
       const replyMsgId = `ast-${Date.now()}`;
 
       const assistantMsg: ChatMessage = {
@@ -150,7 +143,10 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ onAwardXP }) => {
       };
 
       setMessages((prev) => [...prev, assistantMsg]);
-      onAwardXP(15, "سؤال الذكاء الاصطناعي");
+      if (chatXPAwardCount < 3) {
+        onAwardXP(15, "سؤال الذكاء الاصطناعي");
+        setChatXPAwardCount((prev) => prev + 1);
+      }
 
       // Auto speak response using selected voice, phonetic enhancements, and tuned rate
       setActiveSpeechId(replyMsgId);

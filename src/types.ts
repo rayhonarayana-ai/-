@@ -285,6 +285,8 @@ export interface UserProgress {
   studentName: string;
   zakiCustomization?: ZakiCustomization;
   weeklyGoal?: WeeklyGoal;
+  appliedXpEventIds?: string[]; // Bounded set of processed idempotent XP event IDs
+  lastLearningActivityDate?: string; // ISO calendar date "YYYY-MM-DD" of last qualifying learning activity
 }
 
 export interface QuizQuestion {

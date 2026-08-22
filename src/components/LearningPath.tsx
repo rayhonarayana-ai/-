@@ -1,6 +1,6 @@
 import React from "react";
 import { motion } from "motion/react";
-import { LabResult, LearningLevel } from "../types";
+import { LabResult, LearningLevel, LabDefinition } from "../types";
 import { computeLearningPath, getLearningPathProgress } from "../data/learningPath";
 import { getLabsByLevel } from "../data/labCatalog";
 import {
@@ -19,15 +19,18 @@ import {
 
 interface LearningPathProps {
   labs: LabResult[];
-  onOpenLab: (labKey: string) => void;
+  onOpenLab?: (labKey: string) => void;
+  onSelectLab?: (lab: LabDefinition) => void;
   onNavigateToProjects: () => void;
   onNavigateToGraduation: () => void;
   childName?: string;
+  progress?: any;
 }
 
 export const LearningPath: React.FC<LearningPathProps> = ({
   labs,
   onOpenLab,
+  onSelectLab,
   onNavigateToProjects,
   onNavigateToGraduation,
   childName = "البطل المبتكر",
@@ -276,7 +279,13 @@ export const LearningPath: React.FC<LearningPathProps> = ({
 
                         {!isLocked ? (
                           <button
-                            onClick={() => onOpenLab(lab.key)}
+                            onClick={() => {
+                              if (onSelectLab) {
+                                onSelectLab(lab);
+                              } else if (onOpenLab) {
+                                onOpenLab(lab.key);
+                              }
+                            }}
                             className={`w-full py-1.5 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1 cursor-pointer transition ${
                               isDone
                                 ? "bg-emerald-600 hover:bg-emerald-700 text-white"

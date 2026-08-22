@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { LabResult, LabDefinition, ProjectCategory } from "../types";
 import { LAB_CATALOG, getLabDefinition } from "../data/labCatalog";
 import { getAchievementCardText } from "../data/graduation";
+import { recordLearningEvidence, mapCategoryToSkillId } from "../utils/learningEvidence";
 import {
   FlaskConical,
   Sparkles,
@@ -94,8 +95,20 @@ export const LabCompletion: React.FC<LabCompletionProps> = ({
         if (prev >= 100) {
           clearInterval(interval);
           setPhase("completed");
+          // Calculate realistic input-driven accuracy adjustment
+          let inputAdjustment = 0;
+          if (targetLabDef.category === "classification") {
+            inputAdjustment = datasetCount >= 50 ? 2 : datasetCount >= 25 ? 0 : -5;
+          } else if (targetLabDef.category === "computer-vision") {
+            inputAdjustment = Math.abs(visionThreshold - 75) <= 10 ? 1 : -4;
+          } else if (targetLabDef.category === "prompt-engineering") {
+            inputAdjustment = userPromptInput.trim().length >= 25 ? 2 : -6;
+          } else if (targetLabDef.category === "python-code") {
+            inputAdjustment = userPythonCode.trim().length >= 20 ? 1 : -6;
+          }
+
           const bonus = isImprovementMode ? targetLabDef.improveBonus : 0;
-          const finalAcc = Math.min(100, (currentAccuracy || targetLabDef.baseAccuracy) + bonus);
+          const finalAcc = Math.min(100, Math.max(50, targetLabDef.baseAccuracy + inputAdjustment + bonus));
           setCurrentAccuracy(finalAcc);
           setAttemptsCount((prevAtt) => prevAtt + 1);
 
@@ -120,6 +133,24 @@ export const LabCompletion: React.FC<LabCompletionProps> = ({
             thumbnail: targetLabDef.thumbnail,
             childId: "child-001",
           };
+
+          const skillId = mapCategoryToSkillId(targetLabDef.category);
+
+          // Record non-assessed lab completion evidence (Catalog practice project)
+          recordLearningEvidence({
+            type: "LAB_COMPLETED",
+            sourceId: `lab-catalog-${targetLabDef.key}`,
+            skillIds: [skillId],
+            score: typeof finalAcc === "number" && !isNaN(finalAcc) ? finalAcc : undefined,
+            assessed: false,
+            masteryEligible: false,
+            attempts: attemptsCount + 1,
+            metadata: {
+              labKey: targetLabDef.key,
+              titleAr: targetLabDef.titleAr,
+              category: targetLabDef.category,
+            },
+          });
 
           if (isImprovementMode && improveLabId) {
             onImproveLab(improveLabId, targetLabDef.improveBonus);

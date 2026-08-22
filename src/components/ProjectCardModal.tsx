@@ -36,10 +36,13 @@ export const ProjectCardModal: React.FC<ProjectCardModalProps> = ({
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
+      case "classification":
       case "train":
         return "🧠";
+      case "computer-vision":
       case "vision":
         return "👁️";
+      case "prompt-engineering":
       case "prompt":
         return "🔮";
       case "ethics":
@@ -48,6 +51,32 @@ export const ProjectCardModal: React.FC<ProjectCardModalProps> = ({
         return "🚀";
     }
   };
+
+  const getCategoryLabel = (category: string) => {
+    switch (category) {
+      case "classification":
+      case "train":
+        return "تصنيف البيانات وتعلم الآلة";
+      case "computer-vision":
+      case "vision":
+        return "الرؤية الحاسوبية ومعالجة الصور";
+      case "prompt-engineering":
+      case "prompt":
+        return "هندسة الأوامر والإبداع";
+      case "ethics":
+        return "أخلاقيات وأمان الذكاء الاصطناعي";
+      default:
+        return "مشروع تطبيقي ذكي";
+    }
+  };
+
+  const projectTitle = project.titleAr || project.title;
+  const projectDesc = project.descriptionAr || project.description;
+  const projectCategoryLabel = getCategoryLabel(project.category);
+  const projectAccuracy = project.accuracy ?? 98;
+  const projectXP = 100;
+  const projectEmoji = project.thumbnail || getCategoryIcon(project.category);
+  const projectCompletedDate = project.completedAt || new Date().toISOString().split("T")[0];
 
   // Generate Canvas Card Image
   const drawCardToCanvas = () => {
@@ -129,12 +158,12 @@ export const ProjectCardModal: React.FC<ProjectCardModalProps> = ({
 
     ctx.fillStyle = "#e0e7ff";
     ctx.font = "bold 22px Cairo, sans-serif";
-    ctx.fillText(`${getCategoryIcon(project.category)} ${project.categoryLabel}`, width - 115, 245);
+    ctx.fillText(`${getCategoryIcon(project.category)} ${projectCategoryLabel}`, width - 115, 245);
 
     // Project Title
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 44px Cairo, sans-serif";
-    const title = project.title.length > 35 ? project.title.substring(0, 35) + "..." : project.title;
+    const title = projectTitle.length > 35 ? projectTitle.substring(0, 35) + "..." : projectTitle;
     ctx.fillText(title, width - 90, 315);
 
     // Student Recognition Text
@@ -150,7 +179,7 @@ export const ProjectCardModal: React.FC<ProjectCardModalProps> = ({
     // Description
     ctx.fillStyle = "#94a3b8";
     ctx.font = "22px Cairo, sans-serif";
-    const desc = project.description.length > 70 ? project.description.substring(0, 70) + "..." : project.description;
+    const desc = projectDesc.length > 70 ? projectDesc.substring(0, 70) + "..." : projectDesc;
     ctx.fillText(desc, width - 90, 500);
 
     // Metrics Box (Accuracy + XP + Rating)
@@ -165,7 +194,7 @@ export const ProjectCardModal: React.FC<ProjectCardModalProps> = ({
 
     ctx.fillStyle = "#10b981";
     ctx.font = "bold 38px Cairo, sans-serif";
-    ctx.fillText(`${project.score}% دقة النموذج`, width - 130, 605);
+    ctx.fillText(`${projectAccuracy}% دقة النموذج`, width - 130, 605);
 
     // Box 2: XP
     ctx.fillStyle = "rgba(30, 41, 59, 0.9)";
@@ -178,7 +207,7 @@ export const ProjectCardModal: React.FC<ProjectCardModalProps> = ({
 
     ctx.fillStyle = "#f59e0b";
     ctx.font = "bold 38px Cairo, sans-serif";
-    ctx.fillText(`+${project.xpEarned} XP مكافأة`, width - 460, 605);
+    ctx.fillText(`+${projectXP} XP مكافأة`, width - 460, 605);
 
     // Box 3: Status
     ctx.fillStyle = "rgba(30, 41, 59, 0.9)";
@@ -198,8 +227,8 @@ export const ProjectCardModal: React.FC<ProjectCardModalProps> = ({
     ctx.direction = "ltr";
     ctx.fillStyle = "#64748b";
     ctx.font = "20px Cairo, sans-serif";
-    ctx.fillText(`Verified AI Creation • ID: #${project.id.slice(0, 12)}`, 90, 715);
-    ctx.fillText(`Date: ${project.completedAt} • Zaki AI Academy Certified`, 90, 745);
+    ctx.fillText(`AI Learning Creation • ID: #${project.id.slice(0, 12)}`, 90, 715);
+    ctx.fillText(`Date: ${projectCompletedDate} • Zaki AI Academy`, 90, 745);
 
     // Left Seal Visual
     ctx.textAlign = "center";
@@ -216,7 +245,7 @@ export const ProjectCardModal: React.FC<ProjectCardModalProps> = ({
 
     ctx.fillStyle = "#fbbf24";
     ctx.font = "bold 18px Cairo, sans-serif";
-    ctx.fillText("ختم زكي المعتمد 🎖️", 170, 360);
+    ctx.fillText("شارة إنجاز زكي 🎖️", 170, 360);
   };
 
   useEffect(() => {
@@ -244,7 +273,7 @@ export const ProjectCardModal: React.FC<ProjectCardModalProps> = ({
   };
 
   const handleCopyText = () => {
-    const text = `🎉 أنجزت مشروع الذكاء الاصطناعي بنجاح!\n📌 المشروع: ${project.title}\n📂 التصنيف: ${project.categoryLabel}\n🏆 الدقة والنتيجة: ${project.score}%\n⭐ نقاط الخبرة: +${project.xpEarned} XP\n👨‍💻 المبتكر: ${studentName}\n🚀 منصة معلم الذكاء الاصطناعي للأطفال`;
+    const text = `🎉 أنجزت مشروع الذكاء الاصطناعي بنجاح!\n📌 المشروع: ${projectTitle}\n📂 التصنيف: ${projectCategoryLabel}\n🏆 الدقة والنتيجة: ${projectAccuracy}%\n⭐ نقاط الخبرة: +${projectXP} XP\n👨‍💻 المبتكر: ${studentName}\n🚀 منصة معلم الذكاء الاصطناعي للأطفال`;
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -277,7 +306,7 @@ export const ProjectCardModal: React.FC<ProjectCardModalProps> = ({
             <span>بطاقة الإنجاز الرقمية للمشروع 🎨</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-black text-white">
-            بطاقة إنجاز: {project.title}
+            بطاقة إنجاز: {projectTitle}
           </h2>
           <p className="text-xs sm:text-sm font-bold text-slate-300">
             يمكنك تحميل البطاقة كصورة PNG ومشاركتها مع عائلتك وأصدقائك أو طباعتها كشهادة!
@@ -292,21 +321,21 @@ export const ProjectCardModal: React.FC<ProjectCardModalProps> = ({
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
             <div className="flex items-center gap-3">
               <div className="w-14 h-14 rounded-2xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-3xl shadow-inner">
-                {project.thumbnailEmoji || getCategoryIcon(project.category)}
+                {projectEmoji}
               </div>
               <div className="text-right">
                 <span className="text-xs font-black text-amber-300 px-2.5 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/20">
-                  {project.categoryLabel}
+                  {projectCategoryLabel}
                 </span>
                 <h3 className="text-lg sm:text-xl font-black text-white mt-1">
-                  {project.title}
+                  {projectTitle}
                 </h3>
               </div>
             </div>
 
             <div className="text-left sm:text-right">
               <div className="text-xs font-bold text-slate-400">تاريخ الإنجاز</div>
-              <div className="text-sm font-black text-slate-200">{project.completedAt}</div>
+              <div className="text-sm font-black text-slate-200">{projectCompletedDate}</div>
             </div>
           </div>
 
@@ -319,10 +348,10 @@ export const ProjectCardModal: React.FC<ProjectCardModalProps> = ({
             </div>
 
             <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-1">
-              <span className="text-xs font-bold text-slate-400">مستوى الإتقان والدقة:</span>
+              <span className="text-xs font-bold text-slate-400">مستوى الدقة المُسجّلة:</span>
               <div className="text-xl font-black text-emerald-400 flex items-center gap-2">
                 <Award className="w-5 h-5" />
-                <span>{project.score}% • ممتاز وموثق</span>
+                <span>{projectAccuracy}% • ممتاز وموثق</span>
               </div>
             </div>
           </div>
@@ -330,11 +359,11 @@ export const ProjectCardModal: React.FC<ProjectCardModalProps> = ({
           <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-right space-y-2">
             <span className="text-xs font-bold text-slate-400">وصف الإنجاز:</span>
             <p className="text-sm font-bold text-slate-200 leading-relaxed">
-              {project.description}
+              {projectDesc}
             </p>
-            {project.kidNotes && (
+            {project.explanationAr && (
               <div className="pt-2 border-t border-white/10 text-xs font-bold text-indigo-200">
-                💬 ملاحظة البطل: "{project.kidNotes}"
+                💬 توضيح النموذج: "{project.explanationAr}"
               </div>
             )}
           </div>

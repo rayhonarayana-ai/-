@@ -52,6 +52,8 @@ export const AchievementCardModal: React.FC<AchievementCardModalProps> = ({
   const [isExportingHtml2Canvas, setIsExportingHtml2Canvas] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedImage, setCopiedImage] = useState(false);
+  const [hasAwardedDownloadXP, setHasAwardedDownloadXP] = useState(false);
+  const [hasAwardedShareXP, setHasAwardedShareXP] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const cardElementRef = useRef<HTMLDivElement | null>(null);
 
@@ -219,11 +221,11 @@ export const AchievementCardModal: React.FC<AchievementCardModalProps> = ({
     // Certificate Main Title
     ctx.font = "900 32px 'Cairo', 'Tajawal', sans-serif";
     ctx.fillStyle = "#ffffff";
-    ctx.fillText("🌟 شَهَادَةُ إِتْقَانِ وَإِنْجَازِ مَشْرُوعِ AI 🌟", width / 2, 160);
+    ctx.fillText("🌟 شَهَادَةُ تَوْثِيقِ وَإِنْجَازِ مَشْرُوعِ AI 🌟", width / 2, 160);
 
     ctx.font = "700 13px 'Cairo', sans-serif";
     ctx.fillStyle = t.gold;
-    ctx.fillText("AI PROJECT MASTERY & PRACTICAL ACHIEVEMENT", width / 2, 185);
+    ctx.fillText("AI PRACTICAL PROJECT & LEARNING ACHIEVEMENT", width / 2, 185);
 
     // Subtle divider line
     const lineGrad = ctx.createLinearGradient(width / 2 - 250, 0, width / 2 + 250, 0);
@@ -300,7 +302,7 @@ export const AchievementCardModal: React.FC<AchievementCardModalProps> = ({
     }
 
     // Metrics Row inside Project Box
-    const accuracyVal = project.accuracy !== undefined ? `${project.accuracy}%` : "100%";
+    const accuracyVal = project.accuracy !== undefined ? `${project.accuracy}%` : "مكتمل بنجاح";
     const dateFormatted = project.completedAt
       ? new Date(project.completedAt).toLocaleDateString("ar-SA", {
           year: "numeric",
@@ -324,7 +326,8 @@ export const AchievementCardModal: React.FC<AchievementCardModalProps> = ({
 
     ctx.font = "bold 14px 'Cairo', sans-serif";
     ctx.fillStyle = "#34d399";
-    ctx.fillText(`⚡ نسبة الإتقان: ${accuracyVal}`, width / 2 - 125, 506);
+    const accuracyLabel = project.accuracy !== undefined ? `⚡ نسبة الدقة: ${project.accuracy}%` : "⚡ الحالة: مكتمل بنجاح";
+    ctx.fillText(accuracyLabel, width / 2 - 125, 506);
 
     // Completion Date badge
     ctx.fillStyle = "rgba(129, 140, 248, 0.2)";
@@ -401,8 +404,9 @@ export const AchievementCardModal: React.FC<AchievementCardModalProps> = ({
         handleDownloadCanvasPNG();
       }
 
-      if (onAwardXP) {
+      if (onAwardXP && !hasAwardedDownloadXP) {
         onAwardXP(20, "تحميل بطاقة إنجاز رقمية");
+        setHasAwardedDownloadXP(true);
       }
     } catch (err) {
       console.error("html2canvas export error:", err);
@@ -428,6 +432,11 @@ export const AchievementCardModal: React.FC<AchievementCardModalProps> = ({
       link.click();
       document.body.removeChild(link);
 
+      if (onAwardXP && !hasAwardedDownloadXP) {
+        onAwardXP(20, "تحميل بطاقة إنجاز رقمية");
+        setHasAwardedDownloadXP(true);
+      }
+
       onShowToast(`تم تحميل بطاقة إنجاز (${project.titleAr || project.title}) بنجاح كصورة PNG فائقة الدقة! 📥✨`);
     } catch (err) {
       console.error(err);
@@ -445,8 +454,9 @@ export const AchievementCardModal: React.FC<AchievementCardModalProps> = ({
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 3000);
       onShowToast("تم نسخ رابط المشاركة الفريد بنجاح! 🔗✨ أرسله لأصدقائك الآن ليطلعوا على إنجازك.");
-      if (onAwardXP) {
+      if (onAwardXP && !hasAwardedShareXP) {
         onAwardXP(15, "مشاركة رابط مشروع ذكي");
+        setHasAwardedShareXP(true);
       }
     } catch (err) {
       console.error(err);
@@ -460,10 +470,14 @@ export const AchievementCardModal: React.FC<AchievementCardModalProps> = ({
   const handleWhatsAppShare = () => {
     if (!project) return;
     const title = project.titleAr || project.title;
-    const score = project.accuracy ? `بنسبة دقة ${project.accuracy}%` : "بتفوق باهر";
+    const score = project.accuracy ? `بنسبة دقة ${project.accuracy}%` : "بإتقان متميز";
     const text = `🌟 مرحباً يا أصدقاء! لقد أتممت بنجاح مشروع الذكاء الاصطناعي «${title}» ${score} على منصة مُعلِّم الذكاء! 🚀🤖\nشاهد بطاقة إنجازي الرقمية وتفاصيل المشروع عبر هذا الرابط الفريد:\n${shareUrl}`;
     const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
     window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+    if (onAwardXP && !hasAwardedShareXP) {
+      onAwardXP(15, "مشاركة رابط مشروع ذكي");
+      setHasAwardedShareXP(true);
+    }
     onShowToast("جاري فتح واتساب لمشاركة بطاقة إنجازك مع أصدقائك! 💬🚀");
   };
 
@@ -518,7 +532,7 @@ export const AchievementCardModal: React.FC<AchievementCardModalProps> = ({
 
   const projectTitle = project.titleAr || project.title;
   const projectDesc = project.descriptionAr || project.description || "تم تدريب واختبار نموذج الذكاء الاصطناعي بنجاح.";
-  const accuracyVal = project.accuracy !== undefined ? `${project.accuracy}%` : "100%";
+  const accuracyVal = project.accuracy !== undefined ? `${project.accuracy}%` : "مكتمل بنجاح";
   const dateFormatted = project.completedAt
     ? new Date(project.completedAt).toLocaleDateString("ar-SA", {
         year: "numeric",
@@ -588,7 +602,7 @@ export const AchievementCardModal: React.FC<AchievementCardModalProps> = ({
                 </span>
               </h3>
               <p className="text-xs text-purple-200 font-medium">
-                شهادة معتمدة ورابط مشاركة فريد لإرساله للأصدقاء والأهل 🌟
+                بطاقة إنجاز ورابط مشاركة تقديري لإرساله للأصدقاء والأهل 🌟
               </p>
             </div>
           </div>
@@ -764,7 +778,7 @@ export const AchievementCardModal: React.FC<AchievementCardModalProps> = ({
                     <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-500/25 border border-emerald-400 text-emerald-300 text-xs font-black">
                         <Zap className="w-3.5 h-3.5" />
-                        <span>نسبة الإتقان: {accuracyVal}</span>
+                        <span>نسبة الدقة: {accuracyVal}</span>
                       </span>
 
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-indigo-500/25 border border-indigo-400 text-indigo-200 text-xs font-black">
@@ -781,22 +795,22 @@ export const AchievementCardModal: React.FC<AchievementCardModalProps> = ({
 
                   {/* Footer Stamps & Verification */}
                   <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 pt-3 border-t border-white/15 relative z-10">
-                    {/* Left: Golden Verification Stamp */}
+                    {/* Left: Verification Stamp */}
                     <div className="flex items-center gap-3">
                       <div className="w-14 h-14 rounded-full border-2 border-amber-400 bg-amber-400/20 flex flex-col items-center justify-center text-center text-amber-300 font-black p-1 shadow-inner">
-                        <span className="text-[9px] leading-tight">معتمد وموثق</span>
+                        <span className="text-[9px] leading-tight">إنجاز مميز</span>
                         <span className="text-[10px] text-white">★ AI ★</span>
                         <span className="text-[8px] opacity-80">2026</span>
                       </div>
                       <div className="text-right">
-                        <span className="text-xs font-black text-amber-300 block">شهادة معتمدة رقمياً</span>
+                        <span className="text-xs font-black text-amber-300 block">بطاقة إنجاز رقمية</span>
                         <span className="text-[10px] text-slate-300 font-mono">ID: {serialId}</span>
                       </div>
                     </div>
 
-                    {/* Right: Signature & Platform URL */}
+                    {/* Right: Platform */}
                     <div className="text-left sm:text-left space-y-0.5">
-                      <span className="text-[11px] font-bold text-slate-300 block">إشراف وتوثيق:</span>
+                      <span className="text-[11px] font-bold text-slate-300 block">إشراف وتوجيه:</span>
                       <span className="text-xs font-black text-white block">مُعلِّم الذكاء الاصطناعي 🤖</span>
                       <span className="text-[10px] text-amber-400 font-mono block">https://moallem-alzaka.edu</span>
                     </div>
@@ -828,7 +842,7 @@ export const AchievementCardModal: React.FC<AchievementCardModalProps> = ({
                       رابط مشاركة فريد لبطاقة إنجاز ({projectTitle})
                     </h4>
                     <p className="text-xs text-indigo-200 leading-relaxed">
-                      عندما يفتح أصدقاؤك هذا الرابط، ستظهر لهم بطاقة إنجازك الرقمية المعتمدة فوراً، ويمكنهم استكشاف نموذجك والاطلاع على درجتك الباهرة!
+                      عندما يفتح أصدقاؤك هذا الرابط، ستظهر لهم بطاقة إنجازك الرقمية فوراً، ويمكنهم استكشاف نموذجك والاطلاع على درجتك الباهرة!
                     </p>
                   </div>
                 </div>

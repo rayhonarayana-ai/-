@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { UserProgress, Badge, WeeklyGoal } from "../types";
 import { INITIAL_BADGES } from "../data/mascot";
 import { ZAKI_COLORS, ZAKI_ACCESSORIES } from "../data/zakiCustomizationData";
+import { getLevelProgressPercentage, XP_PER_LEVEL } from "../domain/progress";
 import { Certificate } from "./Certificate";
 import { GoalTracker } from "./GoalTracker";
 import { Award, Star, Flame, Trophy, Lock, Sparkles, Wand2, Palette, Shield, X, CheckCircle2 } from "lucide-react";
@@ -26,8 +27,8 @@ export const RewardsPanel: React.FC<RewardsPanelProps> = ({
 }) => {
   const [selectedBadgeModal, setSelectedBadgeModal] = useState<Badge | null>(null);
 
-  const xpForNextLevel = progress.level * 200;
-  const currentLevelProgress = Math.min(100, Math.floor((progress.xp / xpForNextLevel) * 100));
+  const currentLevelProgress = getLevelProgressPercentage(progress.xp);
+  const xpForNextLevel = progress.level * XP_PER_LEVEL;
 
   const unlockedColorsCount = ZAKI_COLORS.filter((c) => c.minLevel <= progress.level).length;
   const unlockedAccessoriesCount = ZAKI_ACCESSORIES.filter((a) => a.minLevel <= progress.level).length;

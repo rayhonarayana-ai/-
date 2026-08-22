@@ -4,6 +4,7 @@ import { LabResult, UserProgress } from "../types";
 import { getLabsStats } from "../data/labs";
 import { computeLearningPath } from "../data/learningPath";
 import { computeGraduationState, RANK_INFO } from "../data/graduation";
+import { getSkillMasteryMap, loadLearningEvidences } from "../utils/learningEvidence";
 import {
   FileText,
   Printer,
@@ -37,6 +38,9 @@ export const ParentReportPanel: React.FC<ParentReportPanelProps> = ({
   const learningLevels = computeLearningPath(labs);
   const graduation = computeGraduationState(labs, childName);
   const currentRankInfo = RANK_INFO[graduation.rank];
+  const evidences = loadLearningEvidences();
+  const skillMasteryMap = getSkillMasteryMap(evidences);
+  const skillsList = Object.values(skillMasteryMap);
 
   const currentDate = new Date().toLocaleDateString("ar-EG", {
     year: "numeric",
@@ -53,7 +57,7 @@ export const ParentReportPanel: React.FC<ParentReportPanelProps> = ({
     strengths.push("شغف لافت بالتفكير الخوارزمي وكتابة كود بايثون الحقيقي واستخدام الحلقات التكرارية.");
   }
   if (stats.byCategory["prompt-engineering"] > 0) {
-    strengths.push("إتقان هندسة الأوامر وتوجيه النماذج التوليدية بأسلوب محكم وخالٍ من الهلوسة.");
+    strengths.push("تطبيق هندسة الأوامر وتوجيه النماذج التوليدية بأسلوب محكم وخالٍ من الهلوسة.");
   }
   if (stats.byCategory.classification > 0 || stats.byCategory["computer-vision"] > 0) {
     strengths.push("استيعاب عميق لمفاهيم التعلّم الإشرافي وتحليل مصفوفات البكسلات في الصور.");
@@ -111,7 +115,7 @@ export const ParentReportPanel: React.FC<ParentReportPanelProps> = ({
 ${labs
   .map(
     (l, idx) =>
-      `${idx + 1}. ${l.thumbnail || "🚀"} ${l.titleAr} (الدقة: ${l.accuracy || 95}%)`
+      `${idx + 1}. ${l.thumbnail || "🚀"} ${l.titleAr} (${l.accuracy !== undefined ? `الدقة: ${l.accuracy}%` : "مكتمل بنجاح"})`
   )
   .join("\n")}
 
@@ -184,7 +188,7 @@ ${growthOpportunities.map((g) => `• ${g}`).join("\n")}
               <span className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center text-sm font-bold">
                 1
               </span>
-              <span>ملخص التقدم ومؤشرات الإتقان:</span>
+              <span>ملخص التقدم ومؤشرات التعلم:</span>
             </h3>
             <span className="text-xs text-slate-500 font-medium">تاريخ الرصد: {currentDate}</span>
           </div>
@@ -198,7 +202,7 @@ ${growthOpportunities.map((g) => `• ${g}`).join("\n")}
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
-              <span className="block text-[11px] font-bold text-slate-500">متوسط الدقة</span>
+              <span className="block text-[11px] font-bold text-slate-500">متوسط دقة التقييمات</span>
               <span className="text-2xl font-black text-emerald-600 font-mono">
                 {stats.averageAccuracy}%
               </span>
@@ -217,6 +221,72 @@ ${growthOpportunities.map((g) => `• ${g}`).join("\n")}
                 {learningLevels.filter((l) => l.status === "completed").length} / 3
               </span>
             </div>
+          </div>
+        </div>
+
+        {/* Section 1.5: Evidence-Based Skills Mastery (Gate 2 Foundation) */}
+        <div className="border-b border-slate-100 pb-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <h3 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2">
+              <span className="w-8 h-8 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center text-sm font-bold">
+                🎯
+              </span>
+              <span>خريطة إتقان المهارات المبنية على الأدلة (Assessment Evidence):</span>
+            </h3>
+            <span className="text-[11px] font-bold text-slate-400">
+              القاعدة التربوية: الإتقان لا يُحتسب إلا باختبارات ومشاريع مقيّمة (XP ≠ Mastery)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {skillsList.map((skill) => {
+              const isDemonstrated = skill.status === "demonstrated";
+              const isDeveloping = skill.status === "developing";
+              const isNotAssessed = skill.status === "not_assessed";
+
+              return (
+                <div
+                  key={skill.skillId}
+                  className={`p-4 rounded-2xl border transition-all ${
+                    isDemonstrated
+                      ? "bg-emerald-50/50 border-emerald-200"
+                      : isDeveloping
+                      ? "bg-amber-50/50 border-amber-200"
+                      : "bg-slate-50 border-slate-200"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-black text-sm text-slate-900">{skill.titleAr}</span>
+                    <span
+                      className={`text-[11px] font-black px-2.5 py-0.5 rounded-full border ${
+                        isDemonstrated
+                          ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                          : isDeveloping
+                          ? "bg-amber-100 text-amber-800 border-amber-300"
+                          : "bg-slate-200 text-slate-600 border-slate-300"
+                      }`}
+                    >
+                      {isDemonstrated && "مُثبت بأدلة (Demonstrated)"}
+                      {isDeveloping && "قيد التطوير (Developing)"}
+                      {isNotAssessed && "غير مُقيّم (Not Assessed)"}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 text-xs text-slate-500 flex items-center justify-between">
+                    <span>
+                      {skill.assessedEvidenceCount > 0
+                        ? `عدد أدلة التقييم: ${skill.assessedEvidenceCount}`
+                        : "لا توجد أدلة تقييم مسجلة بعد"}
+                    </span>
+                    {skill.averageScore !== undefined && (
+                      <span className="font-bold text-slate-700">
+                        متوسط دقة الاختبارات: {skill.averageScore}%
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -245,7 +315,7 @@ ${growthOpportunities.map((g) => `• ${g}`).join("\n")}
 
                 <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                   <span className="text-xs font-black px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-200">
-                    دقة {lab.accuracy || 95}%
+                    {lab.accuracy !== undefined ? `دقة ${lab.accuracy}%` : "مكتمل بنجاح"}
                   </span>
                   <span className="text-xs font-bold px-2 py-1 rounded-xl bg-slate-200 text-slate-700">
                     {lab.attempts || 1} محاولات
@@ -341,12 +411,12 @@ ${growthOpportunities.map((g) => `• ${g}`).join("\n")}
           <div className="p-5 rounded-2xl bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="space-y-1">
               <h4 className="font-black text-sm text-indigo-950">
-                الهدف القادم: رتبة مطور صغير معتمد في الذكاء الاصطناعي 🎓
+                الهدف الأكاديمي: رتبة مطور صغير في الذكاء الاصطناعي 🎓
               </h4>
               <p className="text-xs text-indigo-800 leading-relaxed">
                 {graduation.canGraduate
-                  ? "البطل مؤهل رسمياً للتخرج واستلام الشهادة الرسمية الموثقة!"
-                  : `متبقي ${graduation.projectsToYoungDeveloper} مشاريع إضافية لإتمام شرط التخرج الرسمي والحصول على شهادة المطور الصغير المعتمدة.`}
+                  ? "البطل مؤهل للتتويج واستلام شهادة الإنجاز الرقمية بناءً على الأدلة التقييمية المعتمدة!"
+                  : "يتطلب التخرج إثبات 3 كفاءات أساسية واجتياز 3 مشاريع مقيّمة بأدلة تعليمية موثقة (XP ≠ Mastery)."}
               </p>
             </div>
 

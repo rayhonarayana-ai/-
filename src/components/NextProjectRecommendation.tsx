@@ -17,8 +17,20 @@ import {
   Wand2,
   Play,
   Flame,
+  BookOpen,
+  HelpCircle,
+  FlaskConical,
+  Target,
 } from "lucide-react";
-import { Project, ProjectCategory, ProjectDifficulty } from "../types";
+import { LabResult, Project, ProjectCategory, ProjectDifficulty, UserProgress } from "../types";
+import { loadLearningEvidences } from "../utils/learningEvidence";
+import { loadLabs } from "../data/storage";
+import {
+  recommendNextLearningAction,
+  getDifficultyLabel,
+  getDifficultyDescription,
+  LearningRecommendation,
+} from "../domain/adaptive";
 
 export interface AIRecommendationDomain {
   category: ProjectCategory;
@@ -106,7 +118,7 @@ export const AI_LEARNING_DOMAINS: AIRecommendationDomain[] = [
     xpReward: 120,
     durationMinutes: 12,
     unexploredReasonAr:
-      "مغامرة الرؤية الحاسوبية بانتظارك! تعلّم كيف تفهم الكاميرا العالم وتحول مصفوفات البكسلات إلى وجوه وأشكال ذكية في أجزاء من الثانية.",
+      "مغامرة الرؤية الحاسوبية بانتظارك! تعلّم كيف تفهم الكاميرا العالم وتحول مصفوفات البكسلات إلى وجوج وأشكال ذكية في أجزاء من الثانية.",
     exploredReasonAr:
       "أتقنت كشف الملامح! اختبر نموذجك في ظروف إضاءة مختلفة لترى كيف تتكيف خوارزميات الرؤية الذكية.",
     whatYouWillLearnAr: [
@@ -151,19 +163,39 @@ export const AI_LEARNING_DOMAINS: AIRecommendationDomain[] = [
 interface NextProjectRecommendationProps {
   projects: Project[];
   childName: string;
+  progress?: UserProgress;
+  labs?: LabResult[];
   onOpenLab?: (labKey: string) => void;
+  onSelectLesson?: (lessonId: string) => void;
+  onStartQuiz?: (topic: string) => void;
   onAwardXP?: (amount: number, reason: string) => void;
 }
 
 export const NextProjectRecommendation: React.FC<NextProjectRecommendationProps> = ({
   projects,
   childName,
+  progress,
+  labs,
   onOpenLab,
+  onSelectLesson,
+  onStartQuiz,
   onAwardXP,
 }) => {
   const [cycleIndex, setCycleIndex] = useState(0);
 
-  // 1. Calculate stats per domain
+  // Derive Authoritative Adaptive Recommendation from Gate 9 Engine
+  const recommendation: LearningRecommendation = useMemo(() => {
+    const evidences = loadLearningEvidences();
+    const storedLabs = labs || loadLabs();
+    return recommendNextLearningAction({
+      childName,
+      progress,
+      evidences,
+      labs: storedLabs,
+    });
+  }, [childName, progress, labs]);
+
+  // Domain Stats for secondary portfolio diversity breakdown
   const domainStats = useMemo(() => {
     const counts: Record<string, number> = {
       classification: 0,
@@ -200,12 +232,10 @@ export const NextProjectRecommendation: React.FC<NextProjectRecommendationProps>
     };
   }, [projects]);
 
-  // 2. Determine pool of recommendations (prioritize unexplored domains first)
   const candidateDomains = useMemo(() => {
     if (domainStats.unexploredDomains.length > 0) {
       return domainStats.unexploredDomains;
     }
-    // If all explored, sort by least projects completed
     return [...AI_LEARNING_DOMAINS].sort((a, b) => {
       const countA = domainStats.counts[a.category] || 0;
       const countB = domainStats.counts[b.category] || 0;
@@ -213,30 +243,61 @@ export const NextProjectRecommendation: React.FC<NextProjectRecommendationProps>
     });
   }, [domainStats]);
 
-  // Current active recommended domain
   const currentDomain =
     candidateDomains[cycleIndex % candidateDomains.length] || AI_LEARNING_DOMAINS[0];
-  const isUnexplored = (domainStats.counts[currentDomain.category] || 0) === 0;
 
   const handleNextSuggestion = () => {
     setCycleIndex((prev) => prev + 1);
   };
 
-  const handleLaunchLab = () => {
+  const handleExecuteRecommendation = () => {
     if (onAwardXP) {
-      onAwardXP(10, `بدء استكشاف المشروع المقترح: ${currentDomain.titleAr}`);
+      onAwardXP(10, `بدء تنفيذ التوصية الذكية: ${recommendation.targetTitleAr}`);
     }
-    if (onOpenLab) {
+
+    if (recommendation.targetType === "quiz" && onStartQuiz && recommendation.suggestedTopic) {
+      onStartQuiz(recommendation.suggestedTopic);
+    } else if (recommendation.targetType === "lesson" && onSelectLesson && recommendation.lessonId) {
+      onSelectLesson(recommendation.lessonId);
+    } else if (recommendation.targetType === "lab" && onOpenLab) {
+      onOpenLab(recommendation.labKey || "train");
+    } else if (onOpenLab) {
       onOpenLab(currentDomain.labKey);
     }
   };
 
-  const diffLabel =
-    currentDomain.difficulty === "easy"
-      ? "سهل 🟢"
-      : currentDomain.difficulty === "medium"
-      ? "متوسط 🟡"
-      : "متقدم 🔴";
+  const getActionBadge = (actionType: string) => {
+    switch (actionType) {
+      case "assess":
+        return {
+          label: "تقييم إثبات الإتقان 📝",
+          className: "bg-amber-100 text-amber-900 border-amber-300",
+          icon: <Award className="w-3.5 h-3.5 text-amber-600" />,
+        };
+      case "review":
+        return {
+          label: "مراجعة تثبيت المهارة 🔄",
+          className: "bg-indigo-100 text-indigo-900 border-indigo-300",
+          icon: <RotateCcw className="w-3.5 h-3.5 text-indigo-600" />,
+        };
+      case "practice":
+      case "project":
+        return {
+          label: "ممارسة تطبيقية عملية 🧪",
+          className: "bg-emerald-100 text-emerald-900 border-emerald-300",
+          icon: <FlaskConical className="w-3.5 h-3.5 text-emerald-600" />,
+        };
+      case "learn":
+      default:
+        return {
+          label: "درس استكشافي جديد 📖",
+          className: "bg-blue-100 text-blue-900 border-blue-300",
+          icon: <BookOpen className="w-3.5 h-3.5 text-blue-600" />,
+        };
+    }
+  };
+
+  const actionBadge = getActionBadge(recommendation.actionType);
 
   return (
     <motion.div
@@ -245,191 +306,103 @@ export const NextProjectRecommendation: React.FC<NextProjectRecommendationProps>
       transition={{ duration: 0.3 }}
       className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden p-5 sm:p-7 space-y-6"
     >
-      {/* Top Header Strip: Coach Badge & Diversity Meter */}
+      {/* Top Header Strip: Coach Badge & Deterministic State Indicator */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-5">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs">
-              <Compass className="w-3.5 h-3.5 text-indigo-600 animate-spin-slow" />
-              <span>المشروع المقترح التالي للبطل {childName} 🎯</span>
+              <Compass className="w-3.5 h-3.5 text-indigo-600" />
+              <span>الموجّه الذكي للبطل {childName} 🎯</span>
             </span>
 
-            {domainStats.isFullyDiverse ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-black bg-amber-100 text-amber-900 border border-amber-300">
-                <Award className="w-3.5 h-3.5 text-amber-600" />
-                <span>شمولية كاملة 100% ⭐</span>
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-black bg-emerald-50 text-emerald-800 border border-emerald-200">
-                <Flame className="w-3.5 h-3.5 text-emerald-600" />
-                <span>تنويع المهارات الذكية 🚀</span>
-              </span>
-            )}
+            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-black border ${actionBadge.className}`}>
+              {actionBadge.icon}
+              <span>{actionBadge.label}</span>
+            </span>
+
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-black bg-slate-100 text-slate-700 border border-slate-200">
+              <span>{getDifficultyLabel(recommendation.difficulty, "ar")}</span>
+            </span>
           </div>
 
-          <h3 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2">
-            <span>مُوجِّه التعلّم الذكي: خطوتك القادمة في عالم AI</span>
+          <h3 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2 pt-1">
+            <span>توصيتك المخصصة التالية: {recommendation.targetTitleAr}</span>
           </h3>
           <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-2xl">
-            {domainStats.isFullyDiverse
-              ? "مبارك! لقد أنجزت مشاريع في جميع مجالات الذكاء الاصطناعي الأساسية. نقترح عليك المختبر التالي لتعزيز سرعتك ودقتك!"
-              : "يقوم النظام الذكي بتحليل محفظتك واقتراح مختبرات في المجالات التي لم تستكشفها بعد، لتصبح مهندساً شاملاً ومبدعاً!"}
+            {recommendation.explanationAr}
           </p>
         </div>
 
-        {/* Diversity Progress Gauge */}
-        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 min-w-[280px] space-y-2">
-          <div className="flex items-center justify-between text-xs font-black">
-            <span className="text-slate-700 flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5 text-amber-500" />
-              <span>مقياس تنوع المجالات:</span>
-            </span>
-            <span className="text-indigo-600 font-extrabold font-mono">
-              {domainStats.diversityPercentage}% ({domainStats.exploredDomains.length}/{AI_LEARNING_DOMAINS.length} مجالات)
-            </span>
-          </div>
-
-          {/* Mini Progress Bar */}
-          <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${domainStats.diversityPercentage}%` }}
-              transition={{ duration: 0.6, ease: "easeOut" }}
-              className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500 rounded-full"
-            />
-          </div>
-
-          {/* 4 Domains Visual Indicator Chips */}
-          <div className="grid grid-cols-4 gap-1.5 pt-1">
-            {AI_LEARNING_DOMAINS.map((dom) => {
-              const isDone = (domainStats.counts[dom.category] || 0) > 0;
-              const isCurrent = currentDomain.category === dom.category;
-              return (
-                <div
-                  key={dom.category}
-                  title={`${dom.topicAr}: ${isDone ? "تم إنجاز مشاريع ✅" : "بانتظار الاستكشاف ⏳"}`}
-                  className={`text-center py-1 px-1 rounded-lg text-[10px] font-black transition-all border ${
-                    isCurrent
-                      ? "bg-indigo-600 text-white border-indigo-600 shadow-xs scale-105"
-                      : isDone
-                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                      : "bg-white text-slate-400 border-slate-200 opacity-70"
-                  }`}
-                >
-                  <span className="block text-xs">{dom.icon}</span>
-                  <span className="truncate block font-mono text-[9px]">
-                    {isDone ? "منجز ✓" : "مقترح"}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+        {/* Action Button */}
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={handleExecuteRecommendation}
+            className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs sm:text-sm font-black rounded-2xl shadow-lg shadow-indigo-200 transition cursor-pointer flex items-center gap-2"
+          >
+            <Play className="w-4 h-4 fill-current" />
+            <span>ابدأ الخطوة المقترحة 🚀</span>
+          </button>
         </div>
       </div>
 
-      {/* Main Recommendation Feature Card with Smooth Transition */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={currentDomain.category}
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: 10 }}
-          transition={{ duration: 0.25 }}
-          className={`relative rounded-3xl p-6 sm:p-8 bg-gradient-to-br ${currentDomain.gradientTheme} text-white shadow-xl ${currentDomain.glowColor} overflow-hidden`}
-        >
-          {/* Subtle Backlight Radial Glow */}
-          <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-          <div className="absolute bottom-0 left-0 w-72 h-72 bg-black/15 rounded-full blur-2xl translate-y-1/2 -translate-x-1/2 pointer-events-none" />
-
-          <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            {/* Left/Main Column: Project Details & Personalized Coaching Note */}
-            <div className="space-y-4 max-w-3xl">
-              {/* Badges strip */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-white/20 backdrop-blur-md text-white border border-white/30">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                  <span>{currentDomain.topicAr}</span>
-                </span>
-
-                <span className="px-3 py-1 rounded-full text-xs font-black bg-amber-400 text-slate-950 shadow-xs">
-                  مستوى: {diffLabel}
-                </span>
-
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-white/15 text-white border border-white/20">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>{currentDomain.durationMinutes} دقائق</span>
-                </span>
-
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-emerald-400/90 text-slate-950 font-bold shadow-xs">
-                  <Zap className="w-3.5 h-3.5 fill-current" />
-                  <span>+{currentDomain.xpReward} XP</span>
-                </span>
-              </div>
-
-              {/* Title & English Subtitle */}
-              <div className="space-y-1">
-                <h4 className="text-xl sm:text-3xl font-black text-white leading-tight flex items-center gap-2">
-                  <span>{currentDomain.titleAr}</span>
-                </h4>
-                <p className="text-xs sm:text-sm text-white/80 font-mono">
-                  {currentDomain.titleEn}
-                </p>
-              </div>
-
-              {/* Zaki AI Coach Reasoning Box */}
-              <div className="p-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-white space-y-2">
-                <div className="flex items-center gap-2 text-xs font-black text-amber-300">
-                  <Lightbulb className="w-4 h-4" />
-                  <span>لماذا نقترح عليك هذا المختبر بالتحديد؟ 💡</span>
-                </div>
-                <p className="text-xs sm:text-sm leading-relaxed text-slate-100 font-medium">
-                  {isUnexplored
-                    ? currentDomain.unexploredReasonAr
-                    : currentDomain.exploredReasonAr}
-                </p>
-
-                {/* Key takeaways bullet pills */}
-                <div className="pt-2 border-t border-white/15 flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-bold text-white/90">ماذا ستتعلم:</span>
-                  {currentDomain.whatYouWillLearnAr.map((item, idx) => (
-                    <span
-                      key={idx}
-                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-black/20 text-[11px] font-medium text-white/95"
-                    >
-                      <CheckCircle2 className="w-3 h-3 text-emerald-300" />
-                      <span>{item}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column: Prominent Action Buttons */}
-            <div className="flex flex-col sm:flex-row md:flex-col items-stretch gap-3 w-full md:w-auto shrink-0 pt-2 md:pt-0">
-              {/* Main Launch Button */}
-              <button
-                onClick={handleLaunchLab}
-                className="px-6 py-3.5 bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-950 font-black rounded-2xl transition-all shadow-xl shadow-black/20 flex items-center justify-center gap-2.5 text-sm cursor-pointer group"
-              >
-                <Play className="w-4 h-4 fill-current group-hover:translate-x-0.5 transition-transform" />
-                <span>ابدأ المختبر المقترح الآن 🚀</span>
-              </button>
-
-              {/* Cycle Alternative Suggestion Button */}
-              {candidateDomains.length > 1 && (
-                <button
-                  onClick={handleNextSuggestion}
-                  className="px-4 py-2.5 bg-white/15 hover:bg-white/25 active:scale-95 text-white font-bold rounded-2xl transition-colors border border-white/25 flex items-center justify-center gap-2 text-xs cursor-pointer"
-                  title="عرض مقترح من مجال آخر"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>اقتراح مجال آخر ({candidateDomains.length} خيارات)</span>
-                </button>
-              )}
-            </div>
+      {/* Secondary Card: Domain Explorer & Practical Lab Portfolio */}
+      <div className="relative rounded-2xl bg-gradient-to-br from-slate-50 to-indigo-50/40 p-4 sm:p-5 border border-slate-200 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-indigo-600" />
+            <h4 className="text-xs sm:text-sm font-black text-slate-800">
+              تنوّع الخبرات في المحفظة العملية:
+            </h4>
           </div>
-        </motion.div>
-      </AnimatePresence>
+          <span className="text-[11px] font-bold text-slate-500">
+            {domainStats.diversityPercentage}% تغطية ({domainStats.exploredDomains.length}/4 مجالات)
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {AI_LEARNING_DOMAINS.map((domain) => {
+            const count = domainStats.counts[domain.category] || 0;
+            const isDone = count > 0;
+
+            return (
+              <div
+                key={domain.category}
+                className={`p-3 rounded-xl border transition flex flex-col justify-between ${
+                  isDone
+                    ? "bg-emerald-50/70 border-emerald-200 text-emerald-950"
+                    : "bg-white border-slate-200 text-slate-800"
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xl">{domain.icon}</span>
+                    {isDone ? (
+                      <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-emerald-200 text-emerald-900">
+                        {count} منجز ✓
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                        متاح للبدء
+                      </span>
+                    )}
+                  </div>
+                  <h5 className="text-xs font-black leading-snug">{domain.titleAr}</h5>
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (onOpenLab) onOpenLab(domain.labKey);
+                  }}
+                  className="mt-2.5 w-full py-1 text-[11px] font-black rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <span>{isDone ? "إعادة التجربة" : "خوض المختبر"}</span>
+                  <ChevronLeft className="w-3 h-3" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </motion.div>
   );
 };

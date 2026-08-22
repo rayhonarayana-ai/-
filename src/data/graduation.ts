@@ -6,6 +6,8 @@ import {
 } from "../types";
 import { computeLearningPath } from "./learningPath";
 import { getLabsStats } from "./labs";
+import { evaluateGraduation, issueOfficialCertificate } from "../domain/graduation";
+import { loadLearningEvidences } from "../utils/learningEvidence";
 
 export type { DeveloperRank };
 
@@ -46,8 +48,8 @@ export const RANK_INFO: Record<
     gradient: "from-purple-500 to-pink-600",
   },
   "young-developer": {
-    titleAr: "مطور صغير معتمد للذكاء الاصطناعي",
-    titleEn: "Certified Young AI Developer",
+    titleAr: "مطور صغير للذكاء الاصطناعي",
+    titleEn: "Young AI Developer",
     icon: "🎓",
     minProjects: 6,
     maxProjects: 999,
@@ -77,69 +79,62 @@ export function generateCertificateSerial(childName: string): string {
 }
 
 /**
- * Computes full graduation state and certificate eligibility
+ * Computes full graduation state and certificate eligibility using authoritative evidence-based evaluation.
  */
 export function computeGraduationState(
   labs: LabResult[] = [],
   childName: string = "البطل المبتكر",
-  storedCertificate?: Certificate | null
+  storedCertificate?: Certificate | null,
+  providedEvidences?: any[]
 ): GraduationState {
-  const stats = getLabsStats(labs);
+  const evidences = providedEvidences || loadLearningEvidences();
+  const evaluation = evaluateGraduation({
+    evidences,
+    labs,
+    storedCertificate,
+    childName,
+  });
+
   const levels = computeLearningPath(labs);
   const completedLevelsCount = levels.filter((l) => l.status === "completed").length;
   const totalProjectsCount = labs.length;
-  const rank = getDeveloperRank(totalProjectsCount);
-  const rankInfo = RANK_INFO[rank];
-
-  // Eligible to graduate if completed all 3 levels OR has at least 6 completed projects
-  const canGraduate = completedLevelsCount >= 3 || totalProjectsCount >= 6;
-  const hasGraduated = !!storedCertificate;
-
   const projectsToYoungDeveloper = Math.max(0, 6 - totalProjectsCount);
 
   return {
-    rank,
-    rankTitleAr: rankInfo.titleAr,
-    rankIcon: rankInfo.icon,
-    canGraduate,
-    hasGraduated,
+    rank: evaluation.rank,
+    rankTitleAr: evaluation.rankTitleAr,
+    rankIcon: evaluation.rankIcon,
+    canGraduate: evaluation.isEligible,
+    hasGraduated: evaluation.hasGraduated,
     certificate: storedCertificate || null,
     projectsToYoungDeveloper,
     completedLevelsCount,
     totalProjectsCount,
-    averageAccuracy: stats.averageAccuracy,
+    averageAccuracy: evaluation.averageAccuracy,
   };
 }
 
 /**
- * Creates and issues a new official certificate
+ * Creates and issues a new official certificate gated by evidence evaluation
  */
 export function generateCertificate(
   childName: string,
   labs: LabResult[],
-  levelsCompleted: number
+  levelsCompleted: number,
+  providedEvidences?: any[]
 ): Certificate {
-  const stats = getLabsStats(labs);
-  const rank = getDeveloperRank(labs.length);
-  const rankInfo = RANK_INFO[rank];
+  const evidences = providedEvidences || loadLearningEvidences();
+  const evaluation = evaluateGraduation({
+    evidences,
+    labs,
+    childName,
+  });
 
-  const highlightProjects = labs
-    .slice(0, 4)
-    .map((l) => `${l.thumbnail || "🚀"} ${l.titleAr} (${l.accuracy || 95}%)`);
-
-  return {
-    id: `cert-${Date.now()}`,
-    childName: childName.trim() || "البطل المبتكر",
-    titleAr: "شهادة مطور صغير معتمد في الذكاء الاصطناعي",
-    issuedAt: new Date().toISOString(),
-    totalProjects: labs.length,
-    averageAccuracy: stats.averageAccuracy,
-    levelsCompleted: levelsCompleted,
-    rank: rank,
-    rankTitleAr: rankInfo.titleAr,
-    highlightProjects: highlightProjects,
-    serialNumber: generateCertificateSerial(childName),
-  };
+  return issueOfficialCertificate(evaluation, {
+    childName,
+    labs,
+    levelsCompleted,
+  });
 }
 
 /**
@@ -152,15 +147,15 @@ export function getCertificateShareText(cert: Certificate): string {
     day: "numeric",
   });
 
-  return `🎓✨ إنجاز استثنائي جديد! ✨🎓
+  return `🎓✨ إنجاز تعليمي جديد! ✨🎓
 
-يسرني مشاركة شهادة تخرج المطور الصغير:
+يسرني مشاركة شهادة إنجاز المطور الصغير:
 🌟 البطل/ة: ${cert.childName}
 🏆 الرتبة: ${cert.rankTitleAr}
-🎯 معدل الدقة والإتقان: ${cert.averageAccuracy}%
+🎯 متوسط دقة التقييمات: ${cert.averageAccuracy}%
 🚀 إجمالي المشاريع المنجزة: ${cert.totalProjects} مشاريع ذكية
 📚 المستويات المكتملة: ${cert.levelsCompleted} من 3 مستويات
-🔖 الرقم التسلسلي المعتمد: ${cert.serialNumber}
+🔖 الرقم التسلسلي للشهادة: ${cert.serialNumber}
 📅 تاريخ الإصدار: ${formattedDate}
 
 أبرز المشاريع:
@@ -192,7 +187,7 @@ export function getPortfolioShareSummary(
 ${labs
   .map(
     (l, idx) =>
-      `${idx + 1}. ${l.thumbnail || "🔹"} ${l.titleAr} [${l.accuracy || 95}% - ${l.attempts} محاولات]`
+      `${idx + 1}. ${l.thumbnail || "🔹"} ${l.titleAr} [${l.accuracy !== undefined ? `${l.accuracy}%` : "مكتمل"} - ${l.attempts} محاولات]`
   )
   .join("\n")}
 
@@ -207,10 +202,10 @@ export function getAchievementCardText(lab: LabResult, childName: string): strin
 
 👦 المطور: ${childName}
 🚀 المشروع: ${lab.titleAr} (${lab.titleEn})
-🎯 نسبة الدقة المحققة: ${lab.accuracy || 95}%
+🎯 نسبة الدقة المحققة: ${lab.accuracy !== undefined ? `${lab.accuracy}%` : "مكتمل بنجاح"}
 ⏱️ عدد محاولات التدريب والتحسين: ${lab.attempts}
 💡 ملخص الإنجاز: ${lab.resultSummaryAr}
-🔖 التوثيق المعتمد: MZ-LAB-${lab.id}
+🔖 معرف المشروع: MZ-LAB-${lab.id}
 
 تم الإنجاز عبر منصة «مُعَلِّمُ الذَّكَاءِ» 🤖✨`;
 }

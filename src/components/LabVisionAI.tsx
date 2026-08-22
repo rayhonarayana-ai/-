@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { speakText } from "../data/mascot";
 import { Eye, Upload, Scan, Sparkles, Volume2, Loader2, Image as ImageIcon, CheckCircle2, ArrowLeft } from "lucide-react";
 import { LabResult } from "../data/labs";
+import { recordLearningEvidence } from "../utils/learningEvidence";
+import { aiClient } from "../services/aiClient";
 
 interface LabVisionAIProps {
   onAwardXP: (amount: number, reason: string) => void;
@@ -41,7 +43,21 @@ export const LabVisionAI: React.FC<LabVisionAIProps> = ({
   const [scanning, setScanning] = useState(false);
   const [visionAnalysis, setVisionAnalysis] = useState<string | null>(null);
   const [showEdgeFilter, setShowEdgeFilter] = useState(false);
+  const [hasAwardedVisionXP, setHasAwardedVisionXP] = useState(false);
   const [savedToPortfolio, setSavedToPortfolio] = useState(false);
+  const objectUrlsRef = useRef<string[]>([]);
+
+  // Cleanup object URLs on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      objectUrlsRef.current.forEach((url) => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {}
+      });
+      objectUrlsRef.current = [];
+    };
+  }, []);
 
   const handleAnalyzeImage = async (imageUrl: string) => {
     setSelectedImg(imageUrl);
@@ -59,30 +75,37 @@ export const LabVisionAI: React.FC<LabVisionAIProps> = ({
         const base64data = reader.result as string;
 
         try {
-          const apiRes = await fetch("/api/vision-explain", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              imageBase64: base64data,
-              mimeType: blob.type || "image/jpeg",
-            }),
+          const data = await aiClient.explainVisionImage({
+            imageBase64: base64data,
+            mimeType: blob.type || "image/jpeg",
           });
 
-          let explanationText = "";
-          if (apiRes.ok) {
-            const data = await apiRes.json();
-            explanationText = data.explanation;
-          } else {
-            explanationText = "رأى الذكاء الاصطناعي الصورة وحللها كمصفوفة ملامح وألوان وبكسلات متناسقة بتفاصيل واضحة! 👁️✨";
-          }
+          const explanationText = data.explanation;
+          const isAiGenerated = data.aiGenerated;
 
           setVisionAnalysis(explanationText);
-          onAwardXP(45, "تحليل رؤية الكمبيوتر بالذكاء الاصطناعي");
+          if (!hasAwardedVisionXP) {
+            onAwardXP(45, "تحليل رؤية الكمبيوتر بالذكاء الاصطناعي");
+            setHasAwardedVisionXP(true);
+          }
           speakText(explanationText.slice(0, 150));
 
           if (onCompleteProject) {
+            // Record non-assessed lab evidence (Visual exploration, assessed = false)
+            recordLearningEvidence({
+              type: "LAB_COMPLETED",
+              sourceId: "lab-vision-ai",
+              skillIds: ["skill_computer_vision"],
+              assessed: false,
+              metadata: { sampleUrl: imageUrl },
+            });
+
             const activeSample = SAMPLE_IMAGES.find((s) => s.url === imageUrl);
             const sampleName = activeSample ? activeSample.title : "صورة مخصصة 🖼️";
+
+            const summaryText = isAiGenerated
+              ? `تحليل ملامح وبكسلات الصورة (${sampleName}) واستخراج المربعات المحيطة والعناصر عبر نموذج الرؤية البصرية.`
+              : `استكشاف تفاعلي لمعالم الصورة (${sampleName}) وتطبيق فلتر مصفوفة الحواف البصرية.`;
 
             const newProject: LabResult = {
               id: `vision-${Date.now()}`,
@@ -91,18 +114,17 @@ export const LabVisionAI: React.FC<LabVisionAIProps> = ({
               titleEn: `Computer Vision Feature Extractor: ${sampleName}`,
               category: "computer-vision",
               completedAt: new Date().toISOString(),
-              accuracy: 98,
               attempts: 1,
               durationMinutes: 12,
-              resultSummaryAr: `تحليل ملامح وبكسلات الصورة (${sampleName}) واستخراج المربعات المحيطة والعناصر بدقة 98% عبر نموذج الرؤية البصرية.`,
-              resultSummaryEn: `Extracted pixel feature maps, bounding coordinates, and color histograms for ${sampleName}.`,
+              resultSummaryAr: summaryText,
+              resultSummaryEn: `Extracted pixel feature maps and analyzed visual contours for ${sampleName}.`,
               codeSnippet: `# تحليل مصفوفة البكسلات واستخراج الملامح
 import cv2
 
 image = cv2.imread("vision_sample.jpg")
 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 edges = cv2.Canny(gray, 100, 200)
-print(f"تم اكتشاف مصفوفة الحواف والملامح بدقة 98%!")`,
+print("تم استخراج مصفوفة الحواف والملامح البصرية بنجاح!")`,
               tags: ["Computer Vision", "Pixel Matrix", "Feature Maps", "Bounding Box"],
               thumbnail: "👁️",
             };
@@ -112,7 +134,9 @@ print(f"تم اكتشاف مصفوفة الحواف والملامح بدقة 98
           }
         } catch (e) {
           console.error(e);
-          setVisionAnalysis("رأى الذكاء الاصطناعي الصورة وحللها كمجموعة ألوان وبكسلات متناسقة بتفاصيل دقيقة! 👁️✨");
+          setVisionAnalysis(
+            "تعذر الاتصال بخدمة تحليل الصور حالياً. جرب تفعيل فلتر الحواف لاستكشاف بنية البكسلات! 👁️💡"
+          );
         } finally {
           setScanning(false);
         }
@@ -129,6 +153,7 @@ print(f"تم اكتشاف مصفوفة الحواف والملامح بدقة 98
     const file = e.target.files?.[0];
     if (file) {
       const url = URL.createObjectURL(file);
+      objectUrlsRef.current.push(url);
       handleAnalyzeImage(url);
     }
   };

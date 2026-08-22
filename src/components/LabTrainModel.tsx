@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { speakText } from "../data/mascot";
 import { Play, RotateCcw, CheckCircle2, Sparkles, Cpu, Layers, HelpCircle, ArrowLeft } from "lucide-react";
 import { LabResult } from "../data/labs";
+import { recordLearningEvidence } from "../utils/learningEvidence";
 
 interface Item {
   id: string;
@@ -79,6 +80,9 @@ export const LabTrainModel: React.FC<LabTrainModelProps> = ({
   const [isModelTrained, setIsModelTrained] = useState(false);
 
   const [testResults, setTestResults] = useState<{ item: Item; predictedCat: "A" | "B"; isCorrect: boolean }[]>([]);
+  const [calculatedAccuracy, setCalculatedAccuracy] = useState<number | null>(null);
+  const [hasAwardedTrainXP, setHasAwardedTrainXP] = useState(false);
+  const [hasAwardedTestXP, setHasAwardedTestXP] = useState(false);
   const [savedToPortfolio, setSavedToPortfolio] = useState(false);
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -127,7 +131,10 @@ export const LabTrainModel: React.FC<LabTrainModelProps> = ({
         setTrainingProgress(100);
         setIsTraining(false);
         setIsModelTrained(true);
-        onAwardXP(50, "تدريب نموذج ذكاء اصطناعي بنجاح");
+        if (!hasAwardedTrainXP) {
+          onAwardXP(50, "تدريب نموذج ذكاء اصطناعي بنجاح");
+          setHasAwardedTrainXP(true);
+        }
         speakText("اكتمل تدريب النموذج بنجاح! حان وقت اختبار دقته على بيانات جديدة!");
       } else {
         setTrainingProgress(currentProgress);
@@ -138,19 +145,66 @@ export const LabTrainModel: React.FC<LabTrainModelProps> = ({
   const handleTestModel = () => {
     if (!isModelTrained) return;
 
-    const results = dataset.testItems.map((item) => {
-      const predictedCat: "A" | "B" = item.category;
+    // Calculate real training label quality
+    const correctCountA = classifiedA.filter((item) => item.category === "A").length;
+    const correctCountB = classifiedB.filter((item) => item.category === "B").length;
+    const totalClassified = classifiedA.length + classifiedB.length;
+    const trainingQuality = totalClassified > 0 ? (correctCountA + correctCountB) / totalClassified : 0;
+
+    const results = dataset.testItems.map((item, idx) => {
+      let isCorrect = true;
+      if (trainingQuality >= 0.85) {
+        isCorrect = true;
+      } else if (trainingQuality >= 0.5) {
+        isCorrect = idx % 2 === 0;
+      } else {
+        isCorrect = false;
+      }
+
+      const predictedCat: "A" | "B" = isCorrect
+        ? item.category
+        : item.category === "A"
+        ? "B"
+        : "A";
+
       return {
         item,
         predictedCat,
-        isCorrect: true,
+        isCorrect,
       };
     });
 
+    const passedCount = results.filter((r) => r.isCorrect).length;
+    const testedAccuracy = Math.round((passedCount / results.length) * 100);
+
     setTestResults(results);
-    onAwardXP(30, "اختبار دقة نموذج AI");
+    setCalculatedAccuracy(testedAccuracy);
+
+    // Record valid assessed evidence with real tested accuracy and generalization rubric
+    recordLearningEvidence({
+      type: "LAB_COMPLETED",
+      sourceId: `lab-train-${dataset.catA}`,
+      skillIds: ["skill_machine_learning"],
+      score: testedAccuracy,
+      correct: passedCount,
+      total: results.length,
+      assessed: true,
+      passed: testedAccuracy >= 75,
+      masteryEligible: testedAccuracy === 100 && results.length >= 4,
+      metadata: { datasetName: dataset.name },
+    });
+
+    if (!hasAwardedTestXP) {
+      onAwardXP(30, "اختبار دقة نموذج AI");
+      setHasAwardedTestXP(true);
+    }
 
     if (!savedToPortfolio && onCompleteProject) {
+      const summaryText =
+        testedAccuracy === 100
+          ? `تم تدريب نموذج تصنيف ذكي للتمييز بين (${dataset.catA}) و (${dataset.catB}) بنجاح وتجربته على عينات اختبار جديدة بنسبة دقة 100%.`
+          : `تم تدريب واختبار نموذج تصنيف للتمييز بين (${dataset.catA}) و (${dataset.catB}) بنسبة دقة محققة بلغت ${testedAccuracy}%.`;
+
       const newLab: LabResult = {
         id: `lab-train-${Date.now()}`,
         labKey: "train-classifier",
@@ -158,11 +212,11 @@ export const LabTrainModel: React.FC<LabTrainModelProps> = ({
         titleEn: `AI Classifier: ${dataset.catA}`,
         category: "classification",
         completedAt: new Date().toISOString(),
-        accuracy: 100,
+        accuracy: testedAccuracy,
         attempts: 1,
         durationMinutes: 10,
-        resultSummaryAr: `تم تدريب نموذج تصنيف ذكي للتمييز بين (${dataset.catA}) و (${dataset.catB}) بنجاح وتجربته على عينات اختبار جديدة بنسبة دقة 100%.`,
-        resultSummaryEn: `Trained supervised binary classifier for ${dataset.name} with 100% accuracy on unseen test samples.`,
+        resultSummaryAr: summaryText,
+        resultSummaryEn: `Trained supervised binary classifier for ${dataset.name} with ${testedAccuracy}% accuracy on test samples.`,
         codeSnippet: `# تدريب مصنف البيانات
 from sklearn.neighbors import KNeighborsClassifier
 
@@ -171,7 +225,7 @@ labels = ["${dataset.catA}", "${dataset.catA}", "${dataset.catB}", "${dataset.ca
 
 model = KNeighborsClassifier(n_neighbors=3)
 model.fit(features, labels)
-print("تم التدريب واجتياز الاختبار بدقة 100% 🚀")`,
+print("دقة الاختبار المحققة: ${testedAccuracy}% 🚀")`,
         tags: ["Machine Learning", "Classification", "Dataset Training"],
         thumbnail: dataset.catA.includes("🍎") ? "🍎" : "🐱",
       };
@@ -193,7 +247,10 @@ print("تم التدريب واجتياز الاختبار بدقة 100% 🚀")`
     setTrainingProgress(0);
     setIsModelTrained(false);
     setTestResults([]);
+    setCalculatedAccuracy(null);
     setSavedToPortfolio(false);
+    setHasAwardedTrainXP(false);
+    setHasAwardedTestXP(false);
   };
 
   return (
@@ -382,9 +439,19 @@ print("تم التدريب واجتياز الاختبار بدقة 100% 🚀")`
                     <div className="text-[10px] text-slate-500">توقع الذكاء الاصطناعي: <strong className="text-purple-700">{res.predictedCat === "A" ? dataset.catA : dataset.catB}</strong></div>
                   </div>
                 </div>
-                <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-lg text-xs font-black flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>دقيق 100%</span>
+                <span
+                  className={`px-2.5 py-1 rounded-lg text-xs font-black flex items-center gap-1 ${
+                    res.isCorrect
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-rose-100 text-rose-800"
+                  }`}
+                >
+                  {res.isCorrect ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  ) : (
+                    <HelpCircle className="w-3.5 h-3.5 text-rose-600" />
+                  )}
+                  <span>{res.isCorrect ? "توقع صحيح ✓" : "توقع غير دقيق ✕"}</span>
                 </span>
               </div>
             ))}

@@ -84,7 +84,7 @@ export const KID_PROMPT_SUGGESTIONS = [
 ];
 
 import { ttsManager } from "./speech/ttsManager";
-import { EnhancedVoiceConfig } from "./speech/types";
+import { EnhancedVoiceConfig, VoiceGender } from "./speech/types";
 
 export interface VoiceConfig {
   pitch: number; // 0.7 - 1.5
@@ -92,7 +92,7 @@ export interface VoiceConfig {
   voicePreset: "friendly" | "robot" | "teacher" | "adventurer" | "superhero" | "thinker";
   lang: "ar-SA" | "ar-MA" | "fr-FR" | "en-US" | string;
   speedPreset?: "slow" | "normal" | "fast";
-  gender?: "boy" | "girl" | "robot" | "teacher";
+  gender?: VoiceGender;
 }
 
 export const DEFAULT_VOICE_CONFIG: VoiceConfig = {
